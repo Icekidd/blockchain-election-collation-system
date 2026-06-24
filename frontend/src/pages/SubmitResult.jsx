@@ -80,14 +80,14 @@ function SubmitForm() {
   const validTotal = accredited > 0 && (totalVotes + rejected) <= accredited;
 
   return (
-    <div className="page-wrap">
+    <div className="page-wrap" style={{ maxWidth: "700px", margin: "0 auto" }}>
       <div className="page-header">
         <span className="eyebrow">Presiding Officer</span>
         <h1 className="page-title">Submit Polling Station Result</h1>
         <div className="page-sub">Results are permanently recorded on-chain once submitted</div>
       </div>
 
-      <div style={{ maxWidth: "600px" }}>
+      <div style={{ maxWidth: "600px", margin: "0 auto" }}>
 
         <div style={{ marginBottom: "22px" }}>
           <div style={{ fontSize: "9px", fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--text2)", marginBottom: "10px", paddingBottom: "7px", borderBottom: "1px solid var(--border)" }}>
