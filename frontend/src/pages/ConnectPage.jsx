@@ -10,6 +10,20 @@ export default function ConnectPage() {
     if (account) navigate("/dashboard");
   }, [account, navigate]);
 
+  function handleConnect() {
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const hasMetaMask = typeof window.ethereum !== "undefined";
+
+    if (isMobile && !hasMetaMask) {
+      // Redirect to MetaMask app with deep link
+      const currentUrl = encodeURIComponent(window.location.href);
+      window.location.href = `https://metamask.app.link/dapp/${window.location.host}`;
+      return;
+    }
+
+    connectWallet();
+  }
+
   return (
     <div style={{
       minHeight: "100vh",
@@ -72,7 +86,7 @@ export default function ConnectPage() {
         )}
 
         <button
-          onClick={connectWallet}
+          onClick={handleConnect}
           disabled={loading}
           className="btn btn-primary"
           style={{ width: "100%", justifyContent: "center", padding: "14px", fontSize: "14px" }}
