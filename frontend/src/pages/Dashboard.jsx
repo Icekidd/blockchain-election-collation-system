@@ -71,25 +71,30 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {role === "SENIOR" && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "12px" }}>
+          <button
+            className="btn btn-secondary"
+            onClick={() => exportResultsPDF(
+              CANDIDATES,
+              totals,
+              constituencies,
+              stats?.stationCount || 0,
+              ELECTION_STATUS[electionStatus] || "Active"
+            )}
+            style={{ display: "flex", alignItems: "center", gap: "7px", fontSize: "12px" }}
+          >
+            Download PDF Report
+          </button>
+        </div>
+      )}
+
       <div className="grid-4" style={{ marginBottom: "20px" }}>
         <StatCard label="Stations Reported"   value={formatNumber(stats?.stationCount || 0)} sub="polling stations"        accentColor="var(--accent2)" />
         <StatCard label="Constituencies"      value={formatNumber(constituencies.length)}     sub={lockedCount + " locked"} accentColor="var(--gold)" />
         <StatCard label="Total Votes Counted" value={formatNumber(grandTotal)}                sub="confirmed only"          accentColor="var(--blue)" />
         <StatCard label="Election Status"     value={ELECTION_STATUS[electionStatus] || "-"} sub="current phase"           accentColor="var(--red)" />
       </div>
-
-      {/* Export button — only for Senior EC Officer */}
-      {role === "SENIOR" && (
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "16px" }}>
-          <button
-            className="btn btn-secondary"
-            onClick={() => exportResultsPDF(CANDIDATES, totals, constituencies, stats?.stationCount || 0, ELECTION_STATUS[electionStatus])}
-            style={{ display: "flex", alignItems: "center", gap: "7px" }}
-          >
-            Download PDF Report
-          </button>
-        </div>
-      )}
 
       <div className="grid-2" style={{ marginBottom: "16px" }}>
         <div className="panel">
