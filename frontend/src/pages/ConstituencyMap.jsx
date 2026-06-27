@@ -13,6 +13,7 @@ export default function ConstituencyMap() {
   const [stationCount,   setStationCount]   = useState(0);
   const [loading,        setLoading]        = useState(true);
   const [filter,         setFilter]         = useState("ALL");
+  const [search,         setSearch]         = useState("");
 
   useEffect(() => {
     async function load() {
@@ -58,16 +59,23 @@ export default function ConstituencyMap() {
     return () => clearInterval(interval);
   }, [contract]);
 
-  const filtered = constituencies.filter(c => {
-    if (filter === "LOCKED")      return c.locked;
-    if (filter === "IN_PROGRESS") return !c.locked && c.reported > 0;
-    if (filter === "PENDING")     return c.reported === 0;
-    return true;
-  });
-
-  const lockedCount    = constituencies.filter(c => c.locked).length;
+  const lockedCount     = constituencies.filter(c => c.locked).length;
   const inProgressCount = constituencies.filter(c => !c.locked && c.reported > 0).length;
-  const pendingCount   = constituencies.filter(c => c.reported === 0).length;
+  const pendingCount    = constituencies.filter(c => c.reported === 0).length;
+
+  const filtered = constituencies
+    .filter(c => {
+      if (filter === "LOCKED")      return c.locked;
+      if (filter === "IN_PROGRESS") return !c.locked && c.reported > 0;
+      if (filter === "PENDING")     return c.reported === 0;
+      return true;
+    })
+    .filter(c =>
+      search === "" ||
+      c.name.toLowerCase().includes(search.toLowerCase()) ||
+      c.district?.toLowerCase().includes(search.toLowerCase()) ||
+      c.region?.toLowerCase().includes(search.toLowerCase())
+    );
 
   if (loading) return (
     <div className="loading-state" style={{ paddingTop: "80px" }}>
@@ -79,27 +87,31 @@ export default function ConstituencyMap() {
     <div className="page-wrap">
       <div className="page-header">
         <span className="eyebrow">Live Collation Progress</span>
-        <h1 className="page-title">Constituency Progress</h1>
+        <h1 className="page-title">Constituency Progress Map</h1>
         <div className="page-sub">
           <span className="live-dot" />
-          {constituencies.length} constituencies · Updates every 30 seconds
+          {constituencies.length} constituencies · Auto-refreshes every 30 seconds
         </div>
       </div>
 
       {/* Summary cards */}
       <div className="grid-4" style={{ marginBottom: "20px" }}>
         {[
-          { label: "Total Constituencies", value: constituencies.length,  color: "var(--text2)" },
-          { label: "Locked",               value: lockedCount,            color: "var(--accent2)" },
-          { label: "In Progress",          value: inProgressCount,        color: "var(--gold)" },
-          { label: "Pending",              value: pendingCount,           color: "#f87171" },
+          { label: "Total Constituencies", value: constituencies.length, color: "var(--text2)"   },
+          { label: "Locked",               value: lockedCount,           color: "var(--accent2)" },
+          { label: "In Progress",          value: inProgressCount,       color: "var(--gold)"    },
+          { label: "Pending",              value: pendingCount,          color: "#f87171"         },
         ].map(s => (
           <div key={s.label} style={{
             background: "var(--surface)", border: "1px solid var(--border)",
             borderRadius: "var(--r-md)", padding: "14px 16px",
           }}>
-            <div style={{ fontSize: "10px", color: "var(--text2)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "6px" }}>{s.label}</div>
-            <div style={{ fontSize: "26px", fontWeight: 700, color: s.color, fontFamily: "DM Mono,monospace" }}>{s.value}</div>
+            <div style={{ fontSize: "10px", color: "var(--text2)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "6px" }}>
+              {s.label}
+            </div>
+            <div style={{ fontSize: "26px", fontWeight: 700, color: s.color, fontFamily: "DM Mono,monospace" }}>
+              {s.value}
+            </div>
           </div>
         ))}
       </div>
@@ -112,7 +124,7 @@ export default function ConstituencyMap() {
             {constituencies.length > 0 ? Math.round((lockedCount / constituencies.length) * 100) : 0}% complete
           </span>
         </div>
-        <div style={{ background: "var(--bg2)", borderRadius: "4px", height: "10px", overflow: "hidden" }}>
+        <div style={{ background: "var(--bg2)", borderRadius: "4px", height: "10px", overflow: "hidden", marginBottom: "10px" }}>
           <div style={{
             height: "100%", borderRadius: "4px",
             width: constituencies.length > 0 ? `${(lockedCount / constituencies.length) * 100}%` : "0%",
@@ -120,7 +132,7 @@ export default function ConstituencyMap() {
             transition: "width 0.8s ease",
           }} />
         </div>
-        <div style={{ display: "flex", gap: "16px", marginTop: "8px", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
           {[
             { color: "var(--accent2)", label: `${lockedCount} Locked` },
             { color: "var(--gold)",    label: `${inProgressCount} In Progress` },
@@ -139,7 +151,7 @@ export default function ConstituencyMap() {
         <div className="panel" style={{ marginBottom: "16px" }}>
           <div className="panel-title">
             <div className="dot" style={{ background: "var(--gold)" }} />
-            Current Standings · {formatNumber(grandTotal)} votes counted
+            Current Standings · {formatNumber(grandTotal)} total votes
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px" }}>
             {CANDIDATES
@@ -147,15 +159,25 @@ export default function ConstituencyMap() {
               .sort((a, b) => (b.votes > a.votes ? 1 : -1))
               .map((c, rank) => (
                 <div key={c.party} style={{
-                  background: "var(--bg2)", border: `1px solid ${rank === 0 ? "rgba(0,146,79,0.3)" : "var(--border)"}`,
-                  borderLeft: `3px solid ${c.color}`, borderRadius: "var(--r-sm)", padding: "10px 12px",
+                  background: "var(--bg2)",
+                  border: `1px solid ${rank === 0 ? "rgba(0,146,79,0.3)" : "var(--border)"}`,
+                  borderLeft: `3px solid ${c.color}`,
+                  borderRadius: "var(--r-sm)", padding: "10px 12px",
                 }}>
-                  {rank === 0 && <div style={{ fontSize: "8px", color: "var(--accent2)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "3px" }}>Leading</div>}
+                  {rank === 0 && (
+                    <div style={{ fontSize: "8px", color: "var(--accent2)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "3px" }}>
+                      Leading
+                    </div>
+                  )}
                   <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--bright)" }}>{c.name}</div>
                   <div style={{ fontSize: "9px", color: c.color, textTransform: "uppercase", fontWeight: 700 }}>{c.party}</div>
                   <div style={{ display: "flex", justifyContent: "space-between", marginTop: "6px", alignItems: "baseline" }}>
-                    <span style={{ fontSize: "18px", fontWeight: 700, color: "var(--bright)", fontFamily: "DM Mono,monospace" }}>{formatNumber(c.votes)}</span>
-                    <span style={{ fontSize: "11px", color: "var(--text2)" }}>{percentage(c.votes, grandTotal)}%</span>
+                    <span style={{ fontSize: "18px", fontWeight: 700, color: "var(--bright)", fontFamily: "DM Mono,monospace" }}>
+                      {formatNumber(c.votes)}
+                    </span>
+                    <span style={{ fontSize: "11px", color: "var(--text2)" }}>
+                      {percentage(c.votes, grandTotal)}%
+                    </span>
                   </div>
                 </div>
               ))}
@@ -163,8 +185,20 @@ export default function ConstituencyMap() {
         </div>
       )}
 
-      {/* Filter chips */}
-      <div style={{ display: "flex", gap: "7px", marginBottom: "14px", flexWrap: "wrap" }}>
+      {/* Search and filters */}
+      <div style={{ display: "flex", gap: "10px", marginBottom: "14px", flexWrap: "wrap", alignItems: "center" }}>
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search constituency, district or region..."
+          style={{
+            flex: 1, minWidth: "200px", padding: "7px 12px",
+            background: "var(--surface)", border: "1px solid var(--border)",
+            borderRadius: "var(--r-sm)", color: "var(--bright)", fontSize: "12px",
+            fontFamily: "DM Sans,sans-serif", outline: "none",
+             boxShadow: "0 0 0 1px var(--border2)",
+          }}
+        />
         {[
           { key: "ALL",         label: `All (${constituencies.length})` },
           { key: "LOCKED",      label: `Locked (${lockedCount})` },
@@ -172,54 +206,73 @@ export default function ConstituencyMap() {
           { key: "PENDING",     label: `Pending (${pendingCount})` },
         ].map(f => (
           <button key={f.key} onClick={() => setFilter(f.key)} style={{
-            padding: "5px 13px", borderRadius: "20px", fontSize: "10px", fontWeight: 600,
+            padding: "6px 13px", borderRadius: "20px", fontSize: "10px", fontWeight: 600,
             border: filter === f.key ? "1px solid rgba(252,209,22,0.35)" : "1px solid var(--border)",
             background: filter === f.key ? "rgba(252,209,22,0.1)" : "var(--surface)",
             color: filter === f.key ? "var(--gold)" : "var(--text2)",
-            cursor: "pointer", fontFamily: "DM Mono,monospace",
+            cursor: "pointer", fontFamily: "DM Mono,monospace", whiteSpace: "nowrap",
           }}>
             {f.label}
           </button>
         ))}
       </div>
 
-      {/* Constituency list */}
+      {/* Constituency cards */}
       {filtered.length === 0 ? (
         <div className="panel" style={{ textAlign: "center", padding: "32px", color: "var(--text2)", fontSize: "12px" }}>
-          No constituencies match this filter yet
+          {search ? `No results for "${search}"` : "No constituencies match this filter"}
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "10px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "10px" }}>
           {filtered.map(c => {
-            const leading = c.votes
-              ? CANDIDATES[c.votes.reduce((maxI, v, i) => BigInt(v) > BigInt(c.votes[maxI]) ? i : maxI, 0)]
-              : null;
+            const leadingIndex = c.votes && c.votes.length > 0
+              ? c.votes.reduce((maxI, v, i) => BigInt(v) > BigInt(c.votes[maxI]) ? i : maxI, 0)
+              : -1;
+            const leading = leadingIndex >= 0 ? CANDIDATES[leadingIndex] : null;
+            const hasVotes = c.total && Number(c.total) > 0;
+
             return (
               <div key={c.name} style={{
                 background: "var(--surface)",
                 border: `1px solid ${c.locked ? "rgba(0,146,79,0.3)" : c.reported > 0 ? "rgba(252,209,22,0.2)" : "var(--border)"}`,
                 borderRadius: "var(--r-md)", padding: "14px",
+                transition: "border-color 0.2s",
               }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
-                  <div>
-                    <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--bright)" }}>{c.name}</div>
-                    <div style={{ fontSize: "10px", color: "var(--text2)" }}>{c.district} · {c.region}</div>
+                  <div style={{ flex: 1, minWidth: 0, paddingRight: "8px" }}>
+                    <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--bright)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {c.name}
+                    </div>
+                    <div style={{ fontSize: "10px", color: "var(--text2)", marginTop: "1px" }}>
+                      {c.district}
+                    </div>
+                    <div style={{ fontSize: "9px", color: "var(--text3)", marginTop: "1px" }}>
+                      {c.region}
+                    </div>
                   </div>
-                  <span className={`pill ${c.locked ? "ok" : c.reported > 0 ? "pend" : "flag"}`}>
+                  <span className={`pill ${c.locked ? "ok" : c.reported > 0 ? "pend" : "flag"}`} style={{ flexShrink: 0 }}>
                     {c.locked ? "Locked" : c.reported > 0 ? "Active" : "Pending"}
                   </span>
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", color: "var(--text2)", marginBottom: "4px" }}>
-                  <span>{c.reported} stations reported</span>
-                  <span style={{ fontFamily: "DM Mono,monospace", color: "var(--bright)" }}>{formatNumber(c.total)} votes</span>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", color: "var(--text2)", marginBottom: "6px" }}>
+                  <span>{c.reported} station{c.reported !== 1 ? "s" : ""} reported</span>
+                  <span style={{ fontFamily: "DM Mono,monospace", color: "var(--bright)" }}>
+                    {formatNumber(c.total)} votes
+                  </span>
                 </div>
 
-                {leading && Number(c.total) > 0 && (
-                  <div style={{ display: "flex", alignItems: "center", gap: "5px", marginTop: "6px", fontSize: "10px" }}>
+                {hasVotes && leading && (
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: "5px",
+                    padding: "5px 8px", borderRadius: "var(--r-sm)",
+                    background: "var(--bg2)", marginTop: "4px",
+                  }}>
                     <div style={{ width: "6px", height: "6px", borderRadius: "2px", background: leading.color, flexShrink: 0 }} />
-                    <span style={{ color: "var(--text2)" }}>Leading:</span>
-                    <span style={{ color: leading.color, fontWeight: 600 }}>{leading.name} ({leading.party})</span>
+                    <span style={{ fontSize: "9px", color: "var(--text2)" }}>Leading:</span>
+                    <span style={{ fontSize: "9px", color: leading.color, fontWeight: 700 }}>
+                      {leading.name} ({leading.party})
+                    </span>
                   </div>
                 )}
               </div>
