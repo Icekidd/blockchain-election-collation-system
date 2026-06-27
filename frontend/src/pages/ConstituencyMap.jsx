@@ -112,27 +112,109 @@ export default function ConstituencyMap() {
         </div>
       </div>
 
-      {/* Summary cards */}
-      <div className="grid-4" style={{ marginBottom: "20px" }}>
-        {[
-          { label: "Total Constituencies", value: constituencies.length, color: "var(--text2)"   },
-          { label: "Locked",               value: lockedCount,           color: "var(--accent2)" },
-          { label: "In Progress",          value: inProgressCount,       color: "var(--gold)"    },
-          { label: "Pending",              value: pendingCount,          color: "#f87171"         },
-        ].map(s => (
-          <div key={s.label} style={{
-            background: "var(--surface)", border: "1px solid var(--border)",
-            borderRadius: "var(--r-md)", padding: "14px 16px",
-          }}>
-            <div style={{ fontSize: "10px", color: "var(--text2)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "6px" }}>
-              {s.label}
+        {/* Summary cards */}
+        <div className="grid-4" style={{ marginBottom: "20px" }}>
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-md)", padding: "14px 16px" }}>
+            <div style={{ fontSize: "10px", color: "var(--text2)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "6px" }}>Total Constituencies</div>
+            <div style={{ fontSize: "26px", fontWeight: 700, color: "var(--text2)", fontFamily: "DM Mono,monospace" }}>275</div>
+            <div style={{ fontSize: "10px", color: "var(--text2)", marginTop: "2px" }}>EC Ghana official count</div>
+        </div>
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-md)", padding: "14px 16px" }}>
+            <div style={{ fontSize: "10px", color: "var(--text2)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "6px" }}>Submitted</div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
+            <div style={{ fontSize: "26px", fontWeight: 700, color: "#3b82f6", fontFamily: "DM Mono,monospace" }}>{constituencies.filter(c => c.reported > 0).length}</div>
+            <div style={{ fontSize: "13px", color: "var(--text2)", fontFamily: "DM Mono,monospace" }}>/ 275</div>
             </div>
-            <div style={{ fontSize: "26px", fontWeight: 700, color: s.color, fontFamily: "DM Mono,monospace" }}>
-              {s.value}
+            <div style={{ fontSize: "10px", color: "#3b82f6", marginTop: "2px" }}>{Math.round((constituencies.filter(c => c.reported > 0).length / 275) * 100)}% of total</div>
+        </div>
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-md)", padding: "14px 16px" }}>
+            <div style={{ fontSize: "10px", color: "var(--text2)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "6px" }}>Confirmed</div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
+            <div style={{ fontSize: "26px", fontWeight: 700, color: "var(--gold)", fontFamily: "DM Mono,monospace" }}>{constituencies.filter(c => (c.confirmed || 0) > 0).length}</div>
+            <div style={{ fontSize: "13px", color: "var(--text2)", fontFamily: "DM Mono,monospace" }}>/ 275</div>
             </div>
-          </div>
-        ))}
-      </div>
+            <div style={{ fontSize: "10px", color: "var(--gold)", marginTop: "2px" }}>{Math.round((constituencies.filter(c => (c.confirmed || 0) > 0).length / 275) * 100)}% of total</div>
+        </div>
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-md)", padding: "14px 16px" }}>
+            <div style={{ fontSize: "10px", color: "var(--text2)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "6px" }}>Locked</div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
+            <div style={{ fontSize: "26px", fontWeight: 700, color: "var(--accent2)", fontFamily: "DM Mono,monospace" }}>{lockedCount}</div>
+            <div style={{ fontSize: "13px", color: "var(--text2)", fontFamily: "DM Mono,monospace" }}>/ 275</div>
+            </div>
+            <div style={{ fontSize: "10px", color: "var(--accent2)", marginTop: "2px" }}>{Math.round((lockedCount / 275) * 100)}% of total</div>
+        </div>
+        </div>
+
+        {/* Master progress bars — out of 275 */}
+        <div className="panel" style={{ marginBottom: "16px" }}>
+        <div className="panel-title">
+            <div className="dot" style={{ background: "var(--gold)" }} />
+            Election Collation Progress — 275 Constituencies
+        </div>
+
+        {/* Submitted */}
+        <div style={{ marginBottom: "10px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", marginBottom: "4px" }}>
+            <span style={{ color: "#3b82f6", fontWeight: 600 }}>Results Submitted</span>
+            <span style={{ fontFamily: "DM Mono,monospace", color: "var(--bright)" }}>
+                {constituencies.filter(c => c.reported > 0).length} / 275
+                <span style={{ color: "#3b82f6", marginLeft: "6px" }}>
+                ({Math.round((constituencies.filter(c => c.reported > 0).length / 275) * 100)}%)
+                </span>
+            </span>
+            </div>
+            <div style={{ background: "var(--bg2)", borderRadius: "4px", height: "10px", overflow: "hidden" }}>
+            <div style={{
+                height: "100%", borderRadius: "4px",
+                width: `${(constituencies.filter(c => c.reported > 0).length / 275) * 100}%`,
+                background: "linear-gradient(90deg, #1d4ed8, #3b82f6)",
+                transition: "width 0.8s ease",
+            }} />
+            </div>
+        </div>
+
+        {/* Confirmed */}
+        <div style={{ marginBottom: "10px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", marginBottom: "4px" }}>
+            <span style={{ color: "var(--gold)", fontWeight: 600 }}>Results Confirmed</span>
+            <span style={{ fontFamily: "DM Mono,monospace", color: "var(--bright)" }}>
+                {constituencies.filter(c => (c.confirmed || 0) > 0).length} / 275
+                <span style={{ color: "var(--gold)", marginLeft: "6px" }}>
+                ({Math.round((constituencies.filter(c => (c.confirmed || 0) > 0).length / 275) * 100)}%)
+                </span>
+            </span>
+            </div>
+            <div style={{ background: "var(--bg2)", borderRadius: "4px", height: "10px", overflow: "hidden" }}>
+            <div style={{
+                height: "100%", borderRadius: "4px",
+                width: `${(constituencies.filter(c => (c.confirmed || 0) > 0).length / 275) * 100}%`,
+                background: "linear-gradient(90deg, #b45309, var(--gold))",
+                transition: "width 0.8s ease",
+            }} />
+            </div>
+        </div>
+
+        {/* Locked */}
+        <div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", marginBottom: "4px" }}>
+            <span style={{ color: "var(--accent2)", fontWeight: 600 }}>Constituencies Locked</span>
+            <span style={{ fontFamily: "DM Mono,monospace", color: "var(--bright)" }}>
+                {lockedCount} / 275
+                <span style={{ color: "var(--accent2)", marginLeft: "6px" }}>
+                ({Math.round((lockedCount / 275) * 100)}%)
+                </span>
+            </span>
+            </div>
+            <div style={{ background: "var(--bg2)", borderRadius: "4px", height: "10px", overflow: "hidden" }}>
+            <div style={{
+                height: "100%", borderRadius: "4px",
+                width: `${(lockedCount / 275) * 100}%`,
+                background: "linear-gradient(90deg, #005838, var(--accent2))",
+                transition: "width 0.8s ease",
+            }} />
+            </div>
+        </div>
+        </div>
 
       {/* Overall progress bar */}
       <div className="panel" style={{ marginBottom: "16px" }}>
