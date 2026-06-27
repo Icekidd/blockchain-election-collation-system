@@ -142,13 +142,86 @@ export default function ConstituencyMap() {
             {constituencies.length > 0 ? Math.round((lockedCount / constituencies.length) * 100) : 0}% complete
           </span>
         </div>
-        <div style={{ background: "var(--bg2)", borderRadius: "4px", height: "10px", overflow: "hidden", marginBottom: "10px" }}>
-          <div style={{
-            height: "100%", borderRadius: "4px",
-            width: constituencies.length > 0 ? `${(lockedCount / constituencies.length) * 100}%` : "0%",
-            background: "linear-gradient(90deg, #005838, var(--accent2))",
-            transition: "width 0.8s ease",
-          }} />
+        {/* Overall progress */}
+        <div style={{ marginBottom: "14px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--text2)", marginBottom: "6px" }}>
+            <span>Overall Collation Progress</span>
+            <span style={{ fontFamily: "DM Mono,monospace", color: "var(--bright)" }}>
+            {constituencies.length > 0 ? Math.round((lockedCount / constituencies.length) * 100) : 0}% complete
+            </span>
+        </div>
+
+        {/* Submitted bar */}
+        <div style={{ marginBottom: "6px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "9px", color: "var(--text2)", marginBottom: "3px" }}>
+            <span>Submitted</span>
+            <span style={{ fontFamily: "DM Mono,monospace" }}>
+                {constituencies.filter(c => c.reported > 0).length} / {constituencies.length} constituencies
+                ({constituencies.length > 0 ? Math.round((constituencies.filter(c => c.reported > 0).length / constituencies.length) * 100) : 0}%)
+            </span>
+            </div>
+            <div style={{ background: "var(--bg2)", borderRadius: "4px", height: "8px", overflow: "hidden" }}>
+            <div style={{
+                height: "100%", borderRadius: "4px",
+                width: constituencies.length > 0 ? `${(constituencies.filter(c => c.reported > 0).length / constituencies.length) * 100}%` : "0%",
+                background: "linear-gradient(90deg, #1d4ed8, #3b82f6)",
+                transition: "width 0.8s ease",
+            }} />
+            </div>
+        </div>
+
+        {/* Confirmed bar */}
+        <div style={{ marginBottom: "6px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "9px", color: "var(--text2)", marginBottom: "3px" }}>
+            <span>Confirmed</span>
+            <span style={{ fontFamily: "DM Mono,monospace" }}>
+                {constituencies.filter(c => (c.confirmed || 0) > 0).length} / {constituencies.length} constituencies
+                ({constituencies.length > 0 ? Math.round((constituencies.filter(c => (c.confirmed || 0) > 0).length / constituencies.length) * 100) : 0}%)
+            </span>
+            </div>
+            <div style={{ background: "var(--bg2)", borderRadius: "4px", height: "8px", overflow: "hidden" }}>
+            <div style={{
+                height: "100%", borderRadius: "4px",
+                width: constituencies.length > 0 ? `${(constituencies.filter(c => (c.confirmed || 0) > 0).length / constituencies.length) * 100}%` : "0%",
+                background: "linear-gradient(90deg, var(--gold), var(--gold2))",
+                transition: "width 0.8s ease",
+            }} />
+            </div>
+        </div>
+
+        {/* Locked bar */}
+        <div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "9px", color: "var(--text2)", marginBottom: "3px" }}>
+            <span>Locked</span>
+            <span style={{ fontFamily: "DM Mono,monospace" }}>
+                {lockedCount} / {constituencies.length} constituencies
+                ({constituencies.length > 0 ? Math.round((lockedCount / constituencies.length) * 100) : 0}%)
+            </span>
+            </div>
+            <div style={{ background: "var(--bg2)", borderRadius: "4px", height: "8px", overflow: "hidden" }}>
+            <div style={{
+                height: "100%", borderRadius: "4px",
+                width: constituencies.length > 0 ? `${(lockedCount / constituencies.length) * 100}%` : "0%",
+                background: "linear-gradient(90deg, #005838, var(--accent2))",
+                transition: "width 0.8s ease",
+            }} />
+            </div>
+        </div>
+        </div>
+
+        {/* Legend */}
+        <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+        {[
+            { color: "#3b82f6",          label: `${constituencies.filter(c => c.reported > 0).length} Submitted` },
+            { color: "var(--gold)",      label: `${constituencies.filter(c => (c.confirmed || 0) > 0).length} Confirmed` },
+            { color: "var(--accent2)",   label: `${lockedCount} Locked` },
+            { color: "#f87171",          label: `${pendingCount} Pending` },
+        ].map(l => (
+            <div key={l.label} style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "10px", color: "var(--text2)" }}>
+            <div style={{ width: "8px", height: "8px", borderRadius: "2px", background: l.color, flexShrink: 0 }} />
+            {l.label}
+            </div>
+        ))}
         </div>
         <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
           {[
