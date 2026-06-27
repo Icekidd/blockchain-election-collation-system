@@ -30,19 +30,37 @@ export default function ConstituencyMap() {
         const grand = new Array(CANDIDATES.length).fill(0n);
         const constData = [];
 
+        // Get all station IDs to count confirmed per constituency
+        const allIds = await c.getAllStationIds();
+        const allResults = await Promise.all(allIds.map(id => c.getResult(id)));
+
         for (const name of constNames) {
-          const [t, grandT] = await c.getConstituencyTotal(name);
-          const info = await c.getConstituency(name);
-          constData.push({
-            name,
-            district: info.district,
-            region:   info.region,
-            locked:   info.locked,
-            reported: Number(info.reportedStations),
-            total:    grandT,
-            votes:    t,
-          });
-          t.forEach((v, i) => { grand[i] += BigInt(v); });
+            const [t, grandT] = await c.getConstituencyTotal(name);
+            const info = await c.getConstituency(name);
+
+            // Count submitted and confirmed stations for this constituency
+            const constStations = allResults.filter(r =>
+                r.constituency === name
+            );
+            const submittedCount = constStations.length;
+            const confirmedCount = constStations.filter(r => Number(r.status) === 1 || Number(r.status) === 3).length;
+            const totalStationsInConst = Number(info.reportedStations);
+            const confirmedPct = submittedCount > 0
+                ? Math.round((confirmedCount / submittedCount) * 100)
+                : 0;
+
+            constData.push({
+                name,
+                district:      info.district,
+                region:        info.region,
+                locked:        info.locked,
+                reported:      submittedCount,
+                confirmed:     confirmedCount,
+                confirmedPct,
+                total:         grandT,
+                votes:         t,
+            });
+            t.forEach((v, i) => { grand[i] += BigInt(v); });
         }
 
         setConstituencies(constData);
@@ -255,11 +273,46 @@ export default function ConstituencyMap() {
                   </span>
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", color: "var(--text2)", marginBottom: "6px" }}>
-                  <span>{c.reported} station{c.reported !== 1 ? "s" : ""} reported</span>
-                  <span style={{ fontFamily: "DM Mono,monospace", color: "var(--bright)" }}>
-                    {formatNumber(c.total)} votes
-                  </span>
+                {/* Stats row */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px", marginBottom: "8px" }}>
+                <div style={{ background: "var(--bg2)", borderRadius: "var(--r-sm)", padding: "6px 8px", textAlign: "center" }}>
+                    <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--bright)", fontFamily: "DM Mono,monospace" }}>
+                    {c.reported}
+                    </div>
+                    <div style={{ fontSize: "9px", color: "var(--text2)", marginTop: "1px" }}>Submitted</div>
+                </div>
+                <div style={{ background: "var(--bg2)", borderRadius: "var(--r-sm)", padding: "6px 8px", textAlign: "center" }}>
+                    <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--accent2)", fontFamily: "DM Mono,monospace" }}>
+                    {c.confirmed || 0}
+                    </div>
+                    <div style={{ fontSize: "9px", color: "var(--text2)", marginTop: "1px" }}>Confirmed</div>
+                </div>
+                <div style={{ background: "var(--bg2)", borderRadius: "var(--r-sm)", padding: "6px 8px", textAlign: "center" }}>
+                    <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--gold)", fontFamily: "DM Mono,monospace" }}>
+                    {c.confirmedPct || 0}%
+                    </div>
+                    <div style={{ fontSize: "9px", color: "var(--text2)", marginTop: "1px" }}>Approved</div>
+                </div>
+                </div>
+
+                {/* Progress bar */}
+                <div style={{ marginBottom: "6px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "9px", color: "var(--text2)", marginBottom: "3px" }}>
+                    <span>Confirmation progress</span>
+                    <span style={{ fontFamily: "DM Mono,monospace" }}>{c.confirmed || 0}/{c.reported} stations</span>
+                </div>
+                <div style={{ background: "var(--border)", borderRadius: "3px", height: "4px", overflow: "hidden" }}>
+                    <div style={{
+                    height: "100%", borderRadius: "3px",
+                    width: `${c.confirmedPct || 0}%`,
+                    background: c.locked
+                        ? "var(--accent2)"
+                        : c.confirmedPct > 0
+                        ? "linear-gradient(90deg, var(--gold), var(--accent2))"
+                        : "var(--border2)",
+                    transition: "width 0.6s ease",
+                    }} />
+                </div>
                 </div>
 
                 {hasVotes && leading && (
