@@ -8,6 +8,9 @@ import { CANDIDATES, REGIONS, DISTRICTS_BY_REGION, CONSTITUENCIES_BY_DISTRICT } 
 import PinkSheetUpload from "../components/PinkSheetUpload.jsx";
 import Toast from "../components/Toast.jsx";
 import { RoleGuard } from "../components/RoleGuard.jsx";
+import OTPVerification from "../components/OTPVerification.jsx";
+import { notifyResultSubmitted } from "../utils/notify.js";
+import { formatNumber, shortAddress } from "../utils/format.js";
 
 export default function SubmitResult() {
   return (
@@ -18,7 +21,7 @@ export default function SubmitResult() {
 }
 
 function SubmitForm() {
-  const { contract } = useWallet();
+  const { contract, account, officerName } = useWallet();
   const { call, loading, error: txError, txHash } = useContract();
   const { upload, ipfsHash, uploading, progress, error: ipfsError, fileName, reset: resetIPFS } = useIPFS();
   const navigate = useNavigate();
@@ -31,6 +34,7 @@ function SubmitForm() {
   const [votes, setVotes] = useState(CANDIDATES.map(() => ""));
   const [errors, setErrors] = useState({});
   const [toast, setToast] = useState(null);
+  const [otpVerified, setOtpVerified] = useState(false);
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
@@ -66,6 +70,15 @@ function SubmitForm() {
         ipfsHash
       ));
       setToast({ message: "Result recorded on-chain successfully", type: "success" });
+      try {
+        await notifyResultSubmitted(
+          form.stationId,
+          form.constituency,
+          officerName || shortAddress(account)
+        );
+      } catch (err) {
+        console.error("Notification failed:", err);
+      }
       setTimeout(() => navigate("/success", {
         state: { stationId: form.stationId, txHash, ipfsHash }
       }), 1500);
@@ -93,6 +106,7 @@ function SubmitForm() {
           <div style={{ fontSize: "9px", fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--text2)", marginBottom: "10px", paddingBottom: "7px", borderBottom: "1px solid var(--border)" }}>
             01 - Station Location
           </div>
+          <OTPVerification onVerified={() => setOtpVerified(true)} />
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
             <div className="field">
               <label>Region</label>
@@ -212,7 +226,7 @@ function SubmitForm() {
         <button
           className="btn btn-primary"
           onClick={handleSubmit}
-          disabled={loading || uploading}
+          disabled={loading || uploading || !otpVerified}
           style={{ width: "100%", justifyContent: "center", padding: "14px", fontSize: "14px" }}
         >
           {loading ? (

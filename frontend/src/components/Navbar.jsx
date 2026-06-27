@@ -15,6 +15,8 @@ const NAV_LINKS = [
   { to: "/ro-review", label: "RO Review",    roles: ["RETURNING","SENIOR"] },
   { to: "/audit",     label: "Audit Log",    roles: ["PRESIDING","RETURNING","SENIOR"] },
   { to: "/dispute",   label: "Disputes",     roles: ["PRESIDING","RETURNING","SENIOR"] },
+  { to: "/map",      label: "Progress Map", roles: ["PRESIDING","RETURNING","SENIOR"] },
+  { to: "/officers", label: "Officers",     roles: ["SENIOR"] },
 ];
 
 export default function Navbar() {

@@ -13,7 +13,7 @@ export function useEvents() {
       const contract = getReadOnlyContract();
       const provider = contract.runner.provider;
       const latest   = await provider.getBlockNumber();
-      const fromBlock = Math.max(0, latest - 1000);
+      const fromBlock = Math.max(0, latest - 9);
 
       const [submitted, confirmed, flagged, locked] = await Promise.all([
         contract.queryFilter("ResultSubmitted",    fromBlock, latest),

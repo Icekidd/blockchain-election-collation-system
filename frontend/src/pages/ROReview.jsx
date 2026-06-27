@@ -5,6 +5,7 @@ import { RESULT_STATUS } from "../utils/contract.js";
 import { ipfsGateway } from "../utils/format.js";
 import { RoleGuard } from "../components/RoleGuard.jsx";
 import Toast from "../components/Toast.jsx";
+import { notifyResultConfirmed, notifyResultFlagged, notifyConstituencyLocked } from "../utils/notify.js";
 
 export default function ROReview() {
   return (
@@ -36,20 +37,22 @@ function ROReviewContent() {
 
   useEffect(() => { if (contract) loadStations(); }, [contract]);
 
-  async function confirm(stationId) {
+ async function confirm(r) {
     try {
-      await call(() => contract.confirmResult(stationId));
-      setToast({ message: stationId + " confirmed", type: "success" });
+      await call(() => contract.confirmResult(r.stationId));
+      setToast({ message: r.stationId + " confirmed", type: "success" });
+      try { await notifyResultConfirmed(r.stationId, r.constituency); } catch(e) { console.error(e); }
       loadStations();
     } catch (err) { console.error(err); }
   }
 
-  async function flag(stationId) {
+  async function flag(r) {
     const reason = window.prompt("Enter reason for flagging:");
     if (!reason) return;
     try {
-      await call(() => contract.flagResult(stationId, reason));
-      setToast({ message: stationId + " flagged", type: "warning" });
+      await call(() => contract.flagResult(r.stationId, reason));
+      setToast({ message: r.stationId + " flagged", type: "warning" });
+      try { await notifyResultFlagged(r.stationId, r.constituency, reason); } catch(e) { console.error(e); }
       loadStations();
     } catch (err) { console.error(err); }
   }
@@ -59,6 +62,7 @@ function ROReviewContent() {
     try {
       await call(() => contract.lockConstituency(constituency));
       setToast({ message: constituency + " locked", type: "success" });
+      try { await notifyConstituencyLocked(constituency); } catch(e) { console.error(e); }
       loadStations();
     } catch (err) { console.error(err); }
   }
@@ -139,8 +143,8 @@ function ROReviewContent() {
                       <div style={{ display: "flex", gap: "6px" }}>
                         {Number(r.status) === 0 && (
                           <>
-                            <button className="btn btn-primary" style={{ padding: "4px 10px", fontSize: "10px" }} onClick={() => confirm(r.stationId)} disabled={loading}>Confirm</button>
-                            <button className="btn btn-danger"  style={{ padding: "4px 10px", fontSize: "10px" }} onClick={() => flag(r.stationId)} disabled={loading}>Flag</button>
+                            <button className="btn btn-primary" style={{ padding: "4px 10px", fontSize: "10px" }} onClick={() => confirm(r)} disabled={loading}>Confirm</button>
+                            <button className="btn btn-danger"  style={{ padding: "4px 10px", fontSize: "10px" }} onClick={() => flag(r)} disabled={loading}>Flag</button>
                           </>
                         )}
                         {Number(r.status) === 1 && (

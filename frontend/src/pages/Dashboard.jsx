@@ -7,9 +7,10 @@ import StatCard from "../components/StatCard.jsx";
 import CandidateBar from "../components/CandidateBar.jsx";
 import ActivityFeed from "../components/ActivityFeed.jsx";
 import { useEvents } from "../hooks/useEvents.js";
+import { exportResultsPDF } from "../utils/exportPDF.js";
 
 export default function Dashboard() {
-  const { contract } = useWallet();
+  const { contract, role } = useWallet();
   const { events, loading: eventsLoading } = useEvents();
   const [stats, setStats] = useState(null);
   const [totals, setTotals] = useState([]);
@@ -76,6 +77,19 @@ export default function Dashboard() {
         <StatCard label="Total Votes Counted" value={formatNumber(grandTotal)}                sub="confirmed only"          accentColor="var(--blue)" />
         <StatCard label="Election Status"     value={ELECTION_STATUS[electionStatus] || "-"} sub="current phase"           accentColor="var(--red)" />
       </div>
+
+      {/* Export button — only for Senior EC Officer */}
+      {role === "SENIOR" && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "16px" }}>
+          <button
+            className="btn btn-secondary"
+            onClick={() => exportResultsPDF(CANDIDATES, totals, constituencies, stats?.stationCount || 0, ELECTION_STATUS[electionStatus])}
+            style={{ display: "flex", alignItems: "center", gap: "7px" }}
+          >
+            Download PDF Report
+          </button>
+        </div>
+      )}
 
       <div className="grid-2" style={{ marginBottom: "16px" }}>
         <div className="panel">
