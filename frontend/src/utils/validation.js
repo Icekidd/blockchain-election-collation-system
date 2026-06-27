@@ -1,3 +1,5 @@
+import { STATION_ID_PREFIXES } from "../data/ghana.js";
+
 export function validateSubmission({
   stationId, stationName, constituency,
   district, region, votes,
@@ -5,7 +7,8 @@ export function validateSubmission({
 }) {
   const errors = {};
 
-  if (!stationId?.trim())    errors.stationId    = "Station ID is required";
+  const stationCheck = validateStationId(stationId);
+  if (!stationCheck.valid) errors.stationId = stationCheck.error;
   if (!stationName?.trim())  errors.stationName  = "Station name is required";
   if (!constituency?.trim()) errors.constituency = "Constituency is required";
   if (!district?.trim())     errors.district     = "District is required";
@@ -51,4 +54,36 @@ export function validateCorrection({
   }
 
   return { errors, isValid: Object.keys(errors).length === 0 };
+}
+
+export function validateStationId(stationId, region) {
+  if (!stationId || !stationId.trim()) {
+    return { valid: false, error: "Polling station ID is required" };
+  }
+
+  const id = stationId.trim().toUpperCase();
+
+  // EC Ghana official format: [Letter][6 digits] e.g. A010101
+  // Optional suffix A or B for split stations e.g. A010801A
+  const ecFormat = /^[A-Z]\d{6}[A-Z]?$/;
+
+  if (!ecFormat.test(id)) {
+    return {
+      valid: false,
+      error: "Invalid format. EC Ghana station IDs look like: A010101 or C2501SPS"
+    };
+  }
+
+  // Region prefix check
+  if (region) {
+    const expectedPrefix = STATION_ID_PREFIXES[region];
+    if (expectedPrefix && !id.startsWith(expectedPrefix)) {
+      return {
+        valid: false,
+        error: `${region} station IDs must start with "${expectedPrefix}" — e.g. ${expectedPrefix}010101`
+      };
+    }
+  }
+
+  return { valid: true, error: null };
 }

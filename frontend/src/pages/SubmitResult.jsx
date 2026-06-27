@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useWallet } from "../context/WalletContext.jsx";
 import { useContract } from "../hooks/useContract.js";
 import { useIPFS } from "../hooks/useIPFS.js";
-import { validateSubmission } from "../utils/validation.js";
+import { validateSubmission, validateStationId } from "../utils/validation.js";
 import { CANDIDATES, REGIONS, DISTRICTS_BY_REGION, CONSTITUENCIES_BY_DISTRICT } from "../data/ghana.js";
 import PinkSheetUpload from "../components/PinkSheetUpload.jsx";
 import Toast from "../components/Toast.jsx";
@@ -50,6 +50,11 @@ function SubmitForm() {
   }
 
   async function handleSubmit() {
+    const stationCheck = validateStationId(form.stationId, form.region);
+    if (!stationCheck.valid) {
+      setErrors({ stationId: stationCheck.error });
+      return;
+    }
     const { errors: errs, isValid } = validateSubmission({
       ...form, votes: votes.map(Number), ipfsHash,
     });
