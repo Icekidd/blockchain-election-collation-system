@@ -44,14 +44,15 @@ function OfficerManagementContent() {
 
       // Add to approved list
       const approvedList = JSON.parse(localStorage.getItem("approvedOfficers") || "[]");
-      approvedList.push({
-        name:       request.name,
-        email:      request.email,
-        wallet:     request.wallet,
-        role:       request.role,
-        reason:     request.reason,
-        approvedAt: new Date().toISOString(),
-      });
+        approvedList.push({
+            name:       request.name,
+            email:      request.email,
+            phone:      request.phone || "",
+            wallet:     request.wallet,
+            role:       request.role,
+            reason:     request.reason,
+            approvedAt: new Date().toISOString(),
+        });
       localStorage.setItem("approvedOfficers", JSON.stringify(approvedList));
 
       loadData();

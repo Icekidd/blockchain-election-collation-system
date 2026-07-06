@@ -3,8 +3,8 @@ import React, { useState, useEffect } from "react";
 // In production use a real SMS service like Twilio or Africa's Talking
 // For now we simulate OTP sending and use EmailJS to send the code
 
-export default function OTPVerification({ onVerified, officerName }) {
-  const [phone,     setPhone]     = useState("");
+export default function OTPVerification({ onVerified, OfficerName, registeredPhone }) {
+ const [phone, setPhone] = useState(registeredPhone || "");
   const [otp,       setOtp]       = useState("");
   const [sentOtp,   setSentOtp]   = useState(null);
   const [step,      setStep]      = useState("phone"); // "phone" | "otp" | "verified"
@@ -20,6 +20,13 @@ export default function OTPVerification({ onVerified, officerName }) {
 
   function generateOTP() {
     return Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === "Enter") {
+        if (step === "phone") sendOTP();
+        if (step === "otp")   verifyOTP();
+    }
   }
 
   async function sendOTP() {
@@ -73,13 +80,20 @@ export default function OTPVerification({ onVerified, officerName }) {
           </p>
           <div style={{ display: "flex", gap: "8px" }}>
             <div className="field" style={{ flex: 1 }}>
-              <label>Phone Number</label>
-              <input
+            <label>Phone Number</label>
+            <input
                 value={phone}
                 onChange={e => setPhone(e.target.value)}
+                onKeyDown={handleKeyDown}
                 placeholder="+233 XX XXX XXXX"
                 style={{ fontFamily: "DM Mono,monospace" }}
-              />
+                readOnly={!!registeredPhone}
+            />
+            {registeredPhone && (
+                <div style={{ fontSize: "10px", color: "var(--text2)", marginTop: "3px" }}>
+                Using your registered phone number
+                </div>
+            )}
             </div>
             <button className="btn btn-primary" onClick={sendOTP} style={{ alignSelf: "flex-end", padding: "9px 16px", fontSize: "12px" }}>
               Send OTP

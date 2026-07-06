@@ -2,7 +2,7 @@ import React, { useState } from "react";
 
 export default function RegisterRequest() {
   const [form, setForm] = useState({
-    name: "", wallet: "", email: "", role: "PRESIDING", reason: ""
+    name: "", wallet: "", email: "",phone: "", role: "PRESIDING", reason: ""
   });
   const [submitted, setSubmitted] = useState(false);
   const [error,     setError]     = useState("");
@@ -17,6 +17,9 @@ export default function RegisterRequest() {
     if (!form.wallet.trim()) { setError("Wallet address is required"); return; }
     if (!form.wallet.startsWith("0x") || form.wallet.length !== 42) {
       setError("Invalid wallet address — must start with 0x and be 42 characters"); return;
+    }
+    if (!form.phone.trim() || form.phone.replace(/\s/g, "").length < 10) {
+      setError("Valid phone number is required"); return;
     }
     if (!form.reason.trim()) {
       setError("EC Staff ID is required"); return;
@@ -115,6 +118,20 @@ export default function RegisterRequest() {
                 You will receive result notifications at this email
               </div>
             </div>
+
+            <div className="field">
+                <label>Phone Number</label>
+                <input
+                    type="tel"
+                    value={form.phone}
+                    onChange={e => set("phone", e.target.value)}
+                    placeholder="+233 XX XXX XXXX"
+                    style={{ fontFamily: "DM Mono,monospace" }}
+                />
+                <div style={{ fontSize: "10px", color: "var(--text2)", marginTop: "3px" }}>
+                    This number will be used for OTP verification when submitting results
+                </div>
+                </div>
 
             <div className="field">
               <label>MetaMask Wallet Address</label>

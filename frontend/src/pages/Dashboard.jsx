@@ -17,6 +17,7 @@ export default function Dashboard() {
   const [constituencies, setConstituencies] = useState([]);
   const [electionStatus, setElectionStatus] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [statusLoading, setStatusLoading] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -45,6 +46,29 @@ export default function Dashboard() {
         setLoading(false);
       }
     }
+
+    async function handleSetStatus(newStatus) {
+      if (electionStatus === newStatus) return;
+      const labels = { 0: "Setup", 1: "Active", 2: "Collating", 3: "Closed" };
+      const confirm = window.confirm(
+        `Change election status to "${labels[newStatus]}"?\n\n` +
+        (newStatus === 3 ? "WARNING: Closing the election will prevent further submissions." : "")
+      );
+      if (!confirm) return;
+
+      setStatusLoading(true);
+      try {
+        const tx = await contract.setElectionStatus(newStatus);
+        await tx.wait();
+        setElectionStatus(newStatus);
+      } catch (err) {
+        console.error("Status update failed:", err);
+        alert("Failed to update status: " + (err.reason || err.message));
+      } finally {
+        setStatusLoading(false);
+      }
+    }
+
     load();
   }, [contract]);
 
@@ -72,7 +96,56 @@ export default function Dashboard() {
       </div>
 
       {role === "SENIOR" && (
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "12px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
+          
+          {/* Election status control */}
+          <div style={{
+            background: "var(--surface)", border: "1px solid var(--border)",
+            borderRadius: "var(--r-md)", padding: "12px 16px",
+            display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap",
+          }}>
+            <div>
+              <div style={{ fontSize: "10px", color: "var(--text2)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "3px" }}>
+                Election Status
+              </div>
+              <div style={{ display: "flex", gap: "6px" }}>
+                {[
+                  { value: 0, label: "Setup",      color: "var(--text2)"   },
+                  { value: 1, label: "Active",     color: "var(--accent2)" },
+                  { value: 2, label: "Collating",  color: "var(--gold)"    },
+                  { value: 3, label: "Closed",     color: "#f87171"        },
+                ].map(s => (
+                  <button
+                    key={s.value}
+                    onClick={() => handleSetStatus(s.value)}
+                    disabled={statusLoading || electionStatus === s.value}
+                    style={{
+                      padding: "5px 12px", borderRadius: "20px", fontSize: "10px", fontWeight: 600,
+                      cursor: electionStatus === s.value ? "default" : "pointer",
+                      border: electionStatus === s.value
+                        ? `1px solid ${s.color}`
+                        : "1px solid var(--border)",
+                      background: electionStatus === s.value
+                        ? `${s.color}20`
+                        : "var(--bg2)",
+                      color: electionStatus === s.value ? s.color : "var(--text2)",
+                      opacity: statusLoading ? 0.5 : 1,
+                    }}
+                  >
+                    {electionStatus === s.value ? `● ${s.label}` : s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {statusLoading && (
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "var(--text2)" }}>
+                <div className="spinner" style={{ width: "14px", height: "14px" }} />
+                Updating...
+              </div>
+            )}
+          </div>
+
+          {/* PDF export button */}
           <button
             className="btn btn-secondary"
             onClick={() => exportResultsPDF(

@@ -35,6 +35,11 @@ function SubmitForm() {
   const [errors, setErrors] = useState({});
   const [toast, setToast] = useState(null);
   const [otpVerified, setOtpVerified] = useState(false);
+  const registeredPhone = React.useMemo(() => {
+  const approved = JSON.parse(localStorage.getItem("approvedOfficers") || "[]");
+  const officer = approved.find(o => o.wallet?.toLowerCase() === account?.toLowerCase());
+  return officer?.phone || "";
+  }, [account]);
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
@@ -111,7 +116,10 @@ function SubmitForm() {
           <div style={{ fontSize: "9px", fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--text2)", marginBottom: "10px", paddingBottom: "7px", borderBottom: "1px solid var(--border)" }}>
             01 - Station Location
           </div>
-          <OTPVerification onVerified={() => setOtpVerified(true)} />
+          <OTPVerification
+            onVerified={() => setOtpVerified(true)}
+            registeredPhone={registeredPhone}
+          />           
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
             <div className="field">
               <label>Region</label>
