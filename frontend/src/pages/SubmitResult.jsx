@@ -11,6 +11,7 @@ import { RoleGuard } from "../components/RoleGuard.jsx";
 import OTPVerification from "../components/OTPVerification.jsx";
 import { notifyResultSubmitted } from "../utils/notify.js";
 import { formatNumber, shortAddress } from "../utils/format.js";
+import { useCandidates } from "../hooks/useCandidates.js";
 
 export default function SubmitResult() {
   return (
@@ -33,6 +34,7 @@ function SubmitForm() {
   });
   const [votes, setVotes] = useState(CANDIDATES.map(() => ""));
   const [errors, setErrors] = useState({});
+  const { candidates: CANDIDATES } = useCandidates();
   const [toast, setToast] = useState(null);
   const [otpVerified, setOtpVerified] = useState(false);
   const registeredPhone = React.useMemo(() => {

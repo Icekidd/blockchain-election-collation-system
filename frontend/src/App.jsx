@@ -14,6 +14,7 @@ import SuccessPage     from "./pages/SuccessPage.jsx";
 import ConstituencyMap   from "./pages/ConstituencyMap.jsx";
 import OfficerManagement from "./pages/OfficerManagement.jsx";
 import RegisterRequest   from "./pages/RegisterRequest.jsx";
+import CandidateManagement from "./pages/CandidateManagement.jsx";
 
 
 export default function App() {
@@ -22,6 +23,7 @@ export default function App() {
       <Navbar />
       <Routes>
         <Route path="/results" element={<PublicResults />} />
+        <Route path="/candidates" element={<ProtectedRoute><CandidateManagement /></ProtectedRoute>} />
         <Route path="/"          element={<ConnectPage />} />
         <Route path="/register"  element={<RegisterRequest />} />
         <Route path="/officers"  element={<ProtectedRoute><OfficerManagement /></ProtectedRoute>} />

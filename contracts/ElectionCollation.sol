@@ -35,7 +35,6 @@ contract ElectionCollation is IElectionCollation, AccessControl, Pausable, Reent
         string[] memory partyNames,
         string[] memory partyColors
     ) {
-        require(candidateNames.length > 0,                   "No candidates");
         require(candidateNames.length == partyNames.length,  "Name/party mismatch");
         require(candidateNames.length == partyColors.length, "Name/color mismatch");
         require(bytes(_electionName).length > 0,             "Empty election name");
@@ -78,6 +77,40 @@ contract ElectionCollation is IElectionCollation, AccessControl, Pausable, Reent
         electionStatus = newStatus;
         emit ElectionStatusChanged(newStatus, block.timestamp);
     }
+
+    function addCandidate(
+        string calldata name,
+        string calldata party,
+        string calldata color
+    ) external onlyRole(SENIOR_EC_OFFICER_ROLE) {
+        require(electionStatus == ElectionStatus.SETUP, "Can only add candidates during SETUP");
+        require(bytes(name).length > 0,  "Empty name");
+        require(bytes(party).length > 0, "Empty party");
+        require(bytes(color).length > 0, "Empty color");
+
+        // Prevent duplicate party
+        for (uint256 i = 0; i < _candidates.length; i++) {
+            require(
+                keccak256(bytes(_candidates[i].party)) != keccak256(bytes(party)),
+                "Party already has a candidate"
+            );
+        }
+
+        _candidates.push(Candidate({ name: name, party: party, color: color }));
+        emit CandidateAdded(name, party, _candidates.length - 1, block.timestamp);
+    }
+
+    function removeCandidate(uint256 index) external onlyRole(SENIOR_EC_OFFICER_ROLE) {
+        require(electionStatus == ElectionStatus.SETUP, "Can only remove during SETUP");
+        require(index < _candidates.length, "Invalid index");
+
+        // Shift and pop to keep array compact
+        for (uint256 i = index; i < _candidates.length - 1; i++) {
+            _candidates[i] = _candidates[i + 1];
+        }
+        _candidates.pop();
+        emit CandidateRemoved(index, block.timestamp);
+    }   
 
     function pause()   external onlyRole(SENIOR_EC_OFFICER_ROLE) { _pause(); }
     function unpause() external onlyRole(SENIOR_EC_OFFICER_ROLE) { _unpause(); }

@@ -40,6 +40,10 @@ export const ABI = [
   "event CorrectionExecuted(uint256 indexed correctionId, string indexed stationId, uint256 timestamp)",
   "event ElectionStatusChanged(uint8 indexed newStatus, uint256 timestamp)",
   "event OfficerRegistered(address indexed wallet, bytes32 indexed role, string name, uint256 timestamp)",
+  "function addCandidate(string name, string party, string color) external",
+  "function removeCandidate(uint256 index) external",
+  "event CandidateAdded(string name, string party, uint256 index, uint256 timestamp)",
+  "event CandidateRemoved(uint256 index, uint256 timestamp)",
 ];
 
 export const ROLES = {

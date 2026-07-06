@@ -61,6 +61,8 @@ interface IElectionCollation {
     event CorrectionApproved(uint256 indexed correctionId, address indexed approvedBy, uint256 timestamp);
     event CorrectionExecuted(uint256 indexed correctionId, string indexed stationId, uint256 timestamp);
     event OfficerRegistered(address indexed wallet, bytes32 indexed role, string name, uint256 timestamp);
+    event CandidateAdded(string name, string party, uint256 index, uint256 timestamp);
+    event CandidateRemoved(uint256 index, uint256 timestamp);
 
     function submitResult(string calldata stationId, string calldata stationName, string calldata constituency, string calldata district, string calldata region, uint256[] calldata votes, uint256 registeredVoters, uint256 accreditedVoters, uint256 rejectedBallots, string calldata ipfsHash) external;
     function confirmResult(string calldata stationId) external;

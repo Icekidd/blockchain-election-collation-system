@@ -2,15 +2,16 @@ import React, { useEffect, useState } from "react";
 import { useWallet } from "../context/WalletContext.jsx";
 import { getReadOnlyContract, ELECTION_STATUS } from "../utils/contract.js";
 import { formatNumber } from "../utils/format.js";
-import { CANDIDATES } from "../data/ghana.js";
+// import { CANDIDATES } from "../data/ghana.js";
 import StatCard from "../components/StatCard.jsx";
 import CandidateBar from "../components/CandidateBar.jsx";
 import ActivityFeed from "../components/ActivityFeed.jsx";
 import { useEvents } from "../hooks/useEvents.js";
 import { exportResultsPDF } from "../utils/exportPDF.js";
+import { useCandidates } from "../hooks/useCandidates.js";
 
 export default function Dashboard() {
-  const { contract, role } = useWallet();
+  const { contract, role, account } = useWallet();
   const { events, loading: eventsLoading } = useEvents();
   const [stats, setStats] = useState(null);
   const [totals, setTotals] = useState([]);
@@ -18,6 +19,7 @@ export default function Dashboard() {
   const [electionStatus, setElectionStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [statusLoading, setStatusLoading] = useState(false);
+  const { candidates: CANDIDATES } = useCandidates();
 
   useEffect(() => {
     async function load() {
@@ -47,30 +49,34 @@ export default function Dashboard() {
       }
     }
 
-    async function handleSetStatus(newStatus) {
-      if (electionStatus === newStatus) return;
-      const labels = { 0: "Setup", 1: "Active", 2: "Collating", 3: "Closed" };
-      const confirm = window.confirm(
-        `Change election status to "${labels[newStatus]}"?\n\n` +
-        (newStatus === 3 ? "WARNING: Closing the election will prevent further submissions." : "")
-      );
-      if (!confirm) return;
-
-      setStatusLoading(true);
-      try {
-        const tx = await contract.setElectionStatus(newStatus);
-        await tx.wait();
-        setElectionStatus(newStatus);
-      } catch (err) {
-        console.error("Status update failed:", err);
-        alert("Failed to update status: " + (err.reason || err.message));
-      } finally {
-        setStatusLoading(false);
-      }
-    }
-
     load();
   }, [contract]);
+
+  async function handleSetStatus(newStatus) {
+    if (electionStatus === newStatus) return;
+    if (!contract) {
+      alert("Contract not connected. Please reconnect your wallet.");
+      return;
+    }
+    const labels = { 0: "Setup", 1: "Active", 2: "Collating", 3: "Closed" };
+    const confirmed = window.confirm(
+      `Change election status to "${labels[newStatus]}"?\n\n` +
+      (newStatus === 3 ? "WARNING: Closing the election will prevent further submissions." : "")
+    );
+    if (!confirmed) return;
+
+    setStatusLoading(true);
+    try {
+      const tx = await contract.setElectionStatus(newStatus);
+      await tx.wait();
+      setElectionStatus(newStatus);
+    } catch (err) {
+      console.error("Status update failed:", err);
+      alert("Failed: " + (err.reason || err.shortMessage || err.message));
+    } finally {
+      setStatusLoading(false);
+    }
+  }
 
   const grandTotal = totals.reduce((s, v) => s + v, 0n);
   const lockedCount = constituencies.filter(c => c.locked).length;
@@ -175,21 +181,28 @@ export default function Dashboard() {
             <div className="dot" style={{ background: "var(--gold)" }} />
             Presidential Standings
           </div>
-          {grandTotal === 0n ? (
+          {CANDIDATES.length === 0 ? (
             <div style={{ color: "var(--text2)", fontSize: "12px", textAlign: "center", padding: "20px 0" }}>
-              No confirmed results yet
+              No candidates registered yet
             </div>
           ) : (
-            CANDIDATES.map((c, i) => (
-              <CandidateBar
-                key={c.party}
-                name={c.name}
-                party={c.party}
-                votes={totals[i] || 0n}
-                total={grandTotal}
-                color={c.color}
-              />
-            ))
+            <>
+              {grandTotal === 0n && (
+                <div style={{ color: "var(--text2)", fontSize: "11px", marginBottom: "10px" }}>
+                  No confirmed results yet — awaiting first confirmations
+                </div>
+              )}
+              {CANDIDATES.map((c, i) => (
+                <CandidateBar
+                  key={c.party}
+                  name={c.name}
+                  party={c.party}
+                  votes={totals[i] || 0n}
+                  total={grandTotal}
+                  color={c.color}
+                />
+              ))}
+            </>
           )}
         </div>
 

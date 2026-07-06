@@ -2,10 +2,11 @@ import React, { useEffect, useState } from "react";
 import { useWallet } from "../context/WalletContext.jsx";
 import { useContract } from "../hooks/useContract.js";
 import { useIPFS } from "../hooks/useIPFS.js";
-import { CANDIDATES } from "../data/ghana.js";
+// import { CANDIDATES } from "../data/ghana.js";
 import { formatNumber, shortAddress } from "../utils/format.js";
 import PinkSheetUpload from "../components/PinkSheetUpload.jsx";
 import Toast from "../components/Toast.jsx";
+import { useCandidates } from "../hooks/useCandidates.js";
 
 export default function DisputePage() {
   const { contract, role } = useWallet();
@@ -19,6 +20,7 @@ export default function DisputePage() {
   const [corrRejected, setCorrRejected] = useState("0");
   const [reason, setReason] = useState("");
   const [toast, setToast] = useState(null);
+  const { candidates: CANDIDATES } = useCandidates();
 
   async function load() {
     try {

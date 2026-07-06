@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { useWallet } from "../context/WalletContext.jsx";
 import { getReadOnlyContract, ELECTION_STATUS } from "../utils/contract.js";
-import { CANDIDATES } from "../data/ghana.js";
+// import { CANDIDATES } from "../data/ghana.js";
 import { formatNumber, percentage } from "../utils/format.js";
+import { useCandidates } from "../hooks/useCandidates.js";
 
 export default function ConstituencyMap() {
   const { contract } = useWallet();
@@ -14,6 +15,7 @@ export default function ConstituencyMap() {
   const [loading,        setLoading]        = useState(true);
   const [filter,         setFilter]         = useState("ALL");
   const [search,         setSearch]         = useState("");
+  const { candidates: CANDIDATES } = useCandidates();
 
   useEffect(() => {
     async function load() {

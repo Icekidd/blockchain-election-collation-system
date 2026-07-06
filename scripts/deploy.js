@@ -38,9 +38,9 @@ async function main() {
   const contract = await Factory.deploy(
     ELECTION_NAME,
     ELECTION_DATE,
-    candidateNames,
-    partyNames,
-    partyColors
+    [],  // candidates added via UI during SETUP
+    [],
+    []
   );
 
   await contract.waitForDeployment();

@@ -17,6 +17,7 @@ const NAV_LINKS = [
   { to: "/dispute",   label: "Disputes",     roles: ["PRESIDING","RETURNING","SENIOR"] },
   { to: "/map",      label: "Progress Map", roles: ["PRESIDING","RETURNING","SENIOR"] },
   { to: "/officers", label: "Officers",     roles: ["SENIOR"] },
+  { to: "/candidates", label: "Candidates", roles: ["SENIOR"] },
 ];
 
 export default function Navbar() {
