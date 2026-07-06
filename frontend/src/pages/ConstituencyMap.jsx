@@ -4,6 +4,7 @@ import { getReadOnlyContract, ELECTION_STATUS } from "../utils/contract.js";
 // import { CANDIDATES } from "../data/ghana.js";
 import { formatNumber, percentage } from "../utils/format.js";
 import { useCandidates } from "../hooks/useCandidates.js";
+import GhanaMap from "../components/GhanaMap.jsx";
 
 export default function ConstituencyMap() {
   const { contract } = useWallet();
@@ -16,6 +17,7 @@ export default function ConstituencyMap() {
   const [filter,         setFilter]         = useState("ALL");
   const [search,         setSearch]         = useState("");
   const { candidates: CANDIDATES } = useCandidates();
+  const [regionFilter, setRegionFilter] = useState(null);
 
   useEffect(() => {
     async function load() {
@@ -88,14 +90,18 @@ export default function ConstituencyMap() {
       if (filter === "LOCKED")      return c.locked;
       if (filter === "IN_PROGRESS") return !c.locked && c.reported > 0;
       if (filter === "PENDING")     return c.reported === 0;
+      
       return true;
     })
+    .filter(c => !regionFilter || c.region === regionFilter)
+    
     .filter(c =>
       search === "" ||
       c.name.toLowerCase().includes(search.toLowerCase()) ||
       c.district?.toLowerCase().includes(search.toLowerCase()) ||
       c.region?.toLowerCase().includes(search.toLowerCase())
     );
+    
 
   if (loading) return (
     <div className="loading-state" style={{ paddingTop: "80px" }}>
@@ -153,6 +159,12 @@ export default function ConstituencyMap() {
             <div className="dot" style={{ background: "var(--gold)" }} />
             Election Collation Progress — 275 Constituencies
         </div>
+
+        <GhanaMap
+          constituencies={constituencies}
+          selectedRegion={regionFilter}
+          onSelectRegion={setRegionFilter}
+        />
 
         {/* Submitted */}
         <div style={{ marginBottom: "10px" }}>
