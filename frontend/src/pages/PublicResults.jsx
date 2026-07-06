@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { getReadOnlyContract, ELECTION_STATUS } from "../utils/contract.js";
 import { useCandidates } from "../hooks/useCandidates.js";
 import { formatNumber, percentage } from "../utils/format.js";
@@ -227,6 +228,33 @@ export default function PublicResults() {
             </div>
           </>
         )}
+
+        {/* ── Share via QR ──────────────────────────────────────────── */}
+        <div style={{
+          marginTop: "24px", padding: "20px",
+          background: "var(--surface)", border: "1px solid var(--border)",
+          borderRadius: "var(--r-md)", textAlign: "center",
+        }}>
+          <div style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--gold)", marginBottom: "12px" }}>
+            Share These Results
+          </div>
+          <div style={{
+            display: "inline-block", padding: "12px",
+            background: "#ffffff", borderRadius: "10px",
+          }}>
+            <QRCodeSVG
+              value={window.location.href}
+              size={140}
+              fgColor="#07110a"
+              bgColor="#ffffff"
+              level="M"
+            />
+          </div>
+          <div style={{ fontSize: "10px", color: "var(--text2)", marginTop: "10px", lineHeight: 1.6 }}>
+            Scan to view live results on any phone — no app or wallet needed.<br />
+            Print and post at collation centres and notice boards.
+          </div>
+        </div>
 
         {/* ── Verification footer ─────────────────────────────── */}
         <div style={{
