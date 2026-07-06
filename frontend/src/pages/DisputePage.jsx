@@ -9,6 +9,7 @@ import Toast from "../components/Toast.jsx";
 import { useCandidates } from "../hooks/useCandidates.js";
 
 export default function DisputePage() {
+  const { candidates: CANDIDATES } = useCandidates();
   const { contract, role } = useWallet();
   const { call, loading, txHash } = useContract();
   const { upload, ipfsHash: correctedHash, uploading, progress, error: ipfsError, fileName, reset } = useIPFS();
@@ -16,11 +17,16 @@ export default function DisputePage() {
   const [flagged, setFlagged] = useState([]);
   const [fetching, setFetching] = useState(true);
   const [selected, setSelected] = useState(null);
-  const [corrVotes, setCorrVotes] = useState(CANDIDATES.map(() => ""));
+  const [corrVotes, setCorrVotes] = useState([]);
+
+    React.useEffect(() => {
+      if (CANDIDATES.length > 0 && corrVotes.length === 0) {
+        setCorrVotes(CANDIDATES.map(() => ""));
+      }
+    }, [CANDIDATES]);
   const [corrRejected, setCorrRejected] = useState("0");
   const [reason, setReason] = useState("");
   const [toast, setToast] = useState(null);
-  const { candidates: CANDIDATES } = useCandidates();
 
   async function load() {
     try {

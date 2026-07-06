@@ -22,6 +22,7 @@ export default function SubmitResult() {
 }
 
 function SubmitForm() {
+  const { candidates: CANDIDATES } = useCandidates();
   const { contract, account, officerName } = useWallet();
   const { call, loading, error: txError, txHash } = useContract();
   const { upload, ipfsHash, uploading, progress, error: ipfsError, fileName, reset: resetIPFS } = useIPFS();
@@ -32,9 +33,14 @@ function SubmitForm() {
     district: "", constituency: "",
     registeredVoters: "", accreditedVoters: "", rejectedBallots: "0",
   });
-  const [votes, setVotes] = useState(CANDIDATES.map(() => ""));
+  const [votes, setVotes] = useState([]);
+
+    React.useEffect(() => {
+      if (CANDIDATES.length > 0 && votes.length === 0) {
+        setVotes(CANDIDATES.map(() => ""));
+      }
+    }, [CANDIDATES]);
   const [errors, setErrors] = useState({});
-  const { candidates: CANDIDATES } = useCandidates();
   const [toast, setToast] = useState(null);
   const [otpVerified, setOtpVerified] = useState(false);
   const registeredPhone = React.useMemo(() => {
