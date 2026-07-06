@@ -235,6 +235,11 @@ export default function PublicResults() {
           background: "var(--surface)", border: "1px solid var(--border)",
           borderRadius: "var(--r-md)", textAlign: "center",
         }}>
+
+          <a href="/verify" style={{ fontSize: "11px", color: "var(--accent2)", textDecoration: "none", display: "inline-block", marginTop: "10px" }}>
+            Verify an individual polling station result →
+          </a>
+
           <div style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--gold)", marginBottom: "12px" }}>
             Share These Results
           </div>

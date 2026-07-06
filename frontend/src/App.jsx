@@ -15,6 +15,7 @@ import ConstituencyMap   from "./pages/ConstituencyMap.jsx";
 import OfficerManagement from "./pages/OfficerManagement.jsx";
 import RegisterRequest   from "./pages/RegisterRequest.jsx";
 import CandidateManagement from "./pages/CandidateManagement.jsx";
+import VerifyResult from "./pages/VerifyResult.jsx";
 
 
 export default function App() {
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="/officers" element={<ProtectedRoute><OfficerManagement /></ProtectedRoute>} />
         <Route path="/register" element={<RegisterRequest />} />
         <Route path="*"          element={<Navigate to="/" />} />
+        <Route path="/verify" element={<VerifyResult />} />
       </Routes>
     </WalletProvider>
   );
