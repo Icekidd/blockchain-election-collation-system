@@ -31,13 +31,16 @@ export default function Dashboard() {
           c.getElectionStatus(),
         ]);
         setElectionStatus(Number(status));
-        const grandTotals = new Array(CANDIDATES.length).fill(0n);
+       const grandTotals = new Array(Math.max(CANDIDATES.length, 4)).fill(0n);
         const constData = [];
         for (const name of constNames) {
           const [t, grand] = await c.getConstituencyTotal(name);
           const info = await c.getConstituency(name);
           constData.push({ name, totals: t, grandTotal: grand, locked: info.locked, reported: Number(info.reportedStations) });
-          t.forEach((v, i) => { grandTotals[i] += BigInt(v); });
+          t.forEach((v, i) => {
+            if (grandTotals[i] === undefined) grandTotals[i] = 0n;
+            grandTotals[i] += BigInt(v);
+          });
         }
         setConstituencies(constData);
         setTotals(grandTotals);

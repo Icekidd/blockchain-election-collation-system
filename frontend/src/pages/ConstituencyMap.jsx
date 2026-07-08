@@ -31,7 +31,7 @@ export default function ConstituencyMap() {
         setStationCount(ids.length);
         setElectionStatus(Number(status));
 
-        const grand = new Array(CANDIDATES.length).fill(0n);
+       const grand = new Array(Math.max(CANDIDATES.length, 4)).fill(0n);
         const constData = [];
 
         // Get all station IDs to count confirmed per constituency
@@ -64,7 +64,10 @@ export default function ConstituencyMap() {
                 total:         grandT,
                 votes:         t,
             });
-            t.forEach((v, i) => { grand[i] += BigInt(v); });
+            t.forEach((v, i) => {
+              if (grand[i] === undefined) grand[i] = 0n;
+              grand[i] += BigInt(v);
+            });
         }
 
         setConstituencies(constData);
