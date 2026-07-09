@@ -191,3 +191,8 @@ html, body, #root {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes slideUp { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.9; }
+}

@@ -4,6 +4,15 @@ import { explorerTx, shortHash } from "../utils/format.js";
 
 const FILTERS = ["All", "ResultSubmitted", "ResultConfirmed", "ResultFlagged", "ConstituencyLocked"];
 
+// Row is still waiting on the targeted log lookup (binary search) to finish
+const isEnriching = (e) => Boolean(e.lookupType) && !e.txHash;
+
+const Pending = () => (
+  <span style={{ color: "var(--text2)", opacity: 0.6, animation: "pulse 1.2s ease-in-out infinite" }} title="Locating transaction on-chain...">
+    …
+  </span>
+);
+
 export default function AuditLog() {
   const { events, loading } = useEvents();
   const [filter, setFilter] = useState("All");
@@ -52,32 +61,51 @@ export default function AuditLog() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((e, i) => (
-                <tr key={i}>
-                  <td>
-                    <span className={"pill " + (e.style === "green" ? "ok" : e.style === "flag" ? "flag" : "lock")}>
-                      {e.type}
-                    </span>
-                  </td>
-                  <td style={{ color: "var(--bright)", fontWeight: 600 }}>{e.stationId}</td>
-                  <td style={{ color: "var(--text2)" }}>{e.officer || "-"}</td>
-                  <td>
-                    {e.txHash ? (
-                      <a href={explorerTx(e.txHash)} target="_blank" rel="noreferrer" style={{ color: "var(--accent2)", textDecoration: "none" }}>
-                        {shortHash(e.txHash)}
-                      </a>
-                    ) : "-"}
-                  </td>
-                  <td style={{ color: "var(--text2)" }}>{e.blockNumber ? "#" + e.blockNumber : "-"}</td>
-                  <td>
-                    {e.ipfsHash ? (
-                      <a href={"https://gateway.pinata.cloud/ipfs/" + e.ipfsHash} target="_blank" rel="noreferrer" style={{ color: "#a78bfa", textDecoration: "none" }}>
-                        {shortHash(e.ipfsHash)}
-                      </a>
-                    ) : "-"}
-                  </td>
-                </tr>
-              ))}
+              {filtered.map((e) => {
+                const pending = isEnriching(e);
+                // Reason lives in e.text after the "flagged — " separator
+                const flagReason = e.type === "ResultFlagged" && e.text?.includes("— ")
+                  ? e.text.split("— ").slice(1).join("— ")
+                  : null;
+
+                return (
+                  <tr key={`${e.type}-${e.stationId}`}>
+                    <td>
+                      <span className={"pill " + (e.style === "green" ? "ok" : e.style === "flag" ? "flag" : "lock")}>
+                        {e.type}
+                      </span>
+                    </td>
+                    <td style={{ color: "var(--bright)", fontWeight: 600 }}>
+                      {e.stationId}
+                      {flagReason && (
+                        <div style={{ color: "var(--text2)", fontWeight: 400, fontSize: "10px", marginTop: "2px" }}>
+                          {flagReason}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ color: "var(--text2)" }}>
+                      {e.officer || (pending ? <Pending /> : "-")}
+                    </td>
+                    <td>
+                      {e.txHash ? (
+                        <a href={explorerTx(e.txHash)} target="_blank" rel="noreferrer" style={{ color: "var(--accent2)", textDecoration: "none" }}>
+                          {shortHash(e.txHash)}
+                        </a>
+                      ) : pending ? <Pending /> : "-"}
+                    </td>
+                    <td style={{ color: "var(--text2)" }}>
+                      {e.blockNumber ? "#" + e.blockNumber : pending ? <Pending /> : "-"}
+                    </td>
+                    <td>
+                      {e.ipfsHash ? (
+                        <a href={"https://gateway.pinata.cloud/ipfs/" + e.ipfsHash} target="_blank" rel="noreferrer" style={{ color: "#a78bfa", textDecoration: "none" }}>
+                          {shortHash(e.ipfsHash)}
+                        </a>
+                      ) : "-"}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
