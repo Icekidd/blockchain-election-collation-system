@@ -19,6 +19,7 @@ function ROReviewContent() {
   const { contract } = useWallet();
   const { call, loading, txHash } = useContract();
   const [stations, setStations] = useState([]);
+  const [lockedConstituencies, setLockedConstituencies] = useState(new Set());
   const [fetching, setFetching] = useState(true);
   const [toast, setToast] = useState(null);
   const [filter, setFilter] = useState("ALL");
@@ -28,6 +29,12 @@ function ROReviewContent() {
       const ids = await contract.getAllStationIds();
       const results = await Promise.all(ids.map(id => contract.getResult(id)));
       setStations(results);
+
+      // Fetch locked state per constituency
+      const constNames = await contract.getAllConstituencies();
+      const constData = await Promise.all(constNames.map(name => contract.getConstituency(name)));
+      const locked = new Set(constNames.filter((_, i) => constData[i].locked));
+      setLockedConstituencies(locked);
     } catch (err) {
       console.error(err);
     } finally {
@@ -37,7 +44,7 @@ function ROReviewContent() {
 
   useEffect(() => { if (contract) loadStations(); }, [contract]);
 
- async function confirm(r) {
+  async function confirm(r) {
     try {
       await call(() => contract.confirmResult(r.stationId));
       setToast({ message: r.stationId + " confirmed", type: "success" });
@@ -125,6 +132,9 @@ function ROReviewContent() {
               ) : filtered.map(r => {
                 const s = RESULT_STATUS[Number(r.status)] || RESULT_STATUS[0];
                 const total = r.votes.reduce((acc, v) => acc + BigInt(v), 0n);
+                const isLocked = lockedConstituencies.has(r.constituency);
+                const canLock = (Number(r.status) === 1 || Number(r.status) === 3) && !isLocked;
+
                 return (
                   <tr key={r.stationId}>
                     <td style={{ color: "var(--bright)", fontWeight: 600 }}>{r.stationId}</td>
@@ -140,15 +150,22 @@ function ROReviewContent() {
                     </td>
                     <td><span className={"pill " + s.style}>{s.label}</span></td>
                     <td>
-                      <div style={{ display: "flex", gap: "6px" }}>
+                      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                         {Number(r.status) === 0 && (
                           <>
                             <button className="btn btn-primary" style={{ padding: "4px 10px", fontSize: "10px" }} onClick={() => confirm(r)} disabled={loading}>Confirm</button>
                             <button className="btn btn-danger"  style={{ padding: "4px 10px", fontSize: "10px" }} onClick={() => flag(r)} disabled={loading}>Flag</button>
                           </>
                         )}
-                        {Number(r.status) === 1 && (
-                          <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: "10px" }} onClick={() => lockConst(r.constituency)} disabled={loading}>Lock Constituency</button>
+                        {canLock && (
+                          <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: "10px" }} onClick={() => lockConst(r.constituency)} disabled={loading}>
+                            Lock Constituency
+                          </button>
+                        )}
+                        {isLocked && (Number(r.status) === 1 || Number(r.status) === 3) && (
+                          <span style={{ fontSize: "10px", color: "var(--text2)", fontFamily: "DM Mono,monospace" }}>
+                            🔒 Locked
+                          </span>
                         )}
                       </div>
                     </td>

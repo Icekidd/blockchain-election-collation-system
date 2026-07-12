@@ -18,8 +18,10 @@ module.exports = {
       url: process.env.AMOY_RPC_URL || "https://polygon-amoy.g.alchemy.com/v2/demo",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       chainId: 80002,
-      timeout: 120000
-    }
+      timeout: 120000,
+      gasPrice: 35000000000,
+      maxPriorityFeePerGas: 35000000000
+    },
   },
   etherscan: {
     apiKey: {
