@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useEvents } from "../hooks/useEvents.js";
 import { explorerTx, shortHash } from "../utils/format.js";
 
-const FILTERS = ["All", "ResultSubmitted", "ResultConfirmed", "ResultFlagged", "ConstituencyLocked"];
+const FILTERS = ["All", "ResultSubmitted", "ResultConfirmed", "ResultFlagged", "CorrectionExecuted", "ConstituencyLocked"];
 
 // Row is still waiting on the targeted log lookup (binary search) to finish
 const isEnriching = (e) => Boolean(e.lookupType) && !e.txHash;

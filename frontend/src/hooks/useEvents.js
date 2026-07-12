@@ -19,7 +19,7 @@ const STATUS_LABEL = {
 };
 
 // The on-chain status value each enrichable event type corresponds to.
-const STATUS_OF_TYPE = { confirmed: 1, flagged: 2 };
+const STATUS_OF_TYPE = { confirmed: 1, flagged: 2, corrected: 3 };
 
 // Maps our internal "type" key to (eventName, indexedFieldGetter).
 // The indexed field is what got hashed into the log's topic — we compute
@@ -29,6 +29,7 @@ const EVENT_LOOKUP = {
   submit:    { eventName: "ResultSubmitted",    indexedFrom: (stationId) => stationId },
   confirmed: { eventName: "ResultConfirmed",    indexedFrom: (stationId) => stationId },
   flagged:   { eventName: "ResultFlagged",      indexedFrom: (stationId) => stationId },
+  corrected: { eventName: "CorrectionExecuted", indexedFrom: (stationId) => stationId },
   locked:    { eventName: "ConstituencyLocked", indexedFrom: (constituencyName) => constituencyName },
 };
 
@@ -125,7 +126,7 @@ export function useEvents() {
 
       const label = STATUS_LABEL[status];
       if (label) {
-        const lookupType = label === "confirmed" ? "confirmed" : label === "flagged" ? "flagged" : null;
+        const lookupType = label === "confirmed" ? "confirmed" : label === "flagged" ? "flagged" : label === "corrected" ? "corrected" : null;
         push({
           key: `${label}-${r.stationId}`,
           lookupType,
@@ -153,49 +154,57 @@ export function useEvents() {
   //   flagged     where status first equals its current value
   // then fetch the log from a single tiny window around that block.
   const findLog = useCallback(async (contract, item, latest) => {
+    console.debug(`[useEvents] findLog called: lookupType=${item.lookupType} stationId=${item.stationId}`);
     const { eventName, indexedFrom } = EVENT_LOOKUP[item.lookupType];
     const provider = contract.runner.provider;
     const address = await contract.getAddress();
     const topic0 = contract.interface.getEvent(eventName).topicHash;
-    const topic1 = ethers.keccak256(ethers.toUtf8Bytes(indexedFrom(item.stationId)));
 
-    // 1. Locate the block containing the event.
+    // CorrectionExecuted indexes correctionId (uint256) as topic1, not a
+    // string — cannot match via keccak256(stationId). Use topic0 only and
+    // filter by stationId from parsed args after fetching.
+    const isCorrectionExecuted = eventName === "CorrectionExecuted";
+    const topic1 = isCorrectionExecuted
+      ? null
+      : ethers.keccak256(ethers.toUtf8Bytes(indexedFrom(item.stationId)));
+
+    // 1. Locate the block containing the event via binary search.
     let candidate = null;
     try {
       if (item.lookupType === "submit") {
         candidate = await blockAtTimestamp(provider, item.timestamp, latest);
-      } else if (item.lookupType === "confirmed" || item.lookupType === "flagged") {
-        const targetStatus = STATUS_OF_TYPE[item.lookupType];
-        // The confirm/flag can only happen at or after the submission block,
-        // so anchor the search there to shrink the range.
-        const submitBlock = await blockAtTimestamp(provider, item.timestamp, latest);
+      } else if (
+              item.lookupType === "confirmed" ||
+              item.lookupType === "flagged"   ||
+              item.lookupType === "corrected"
+            ) {
+              const targetStatus = STATUS_OF_TYPE[item.lookupType];
+              console.debug(`[useEvents] starting binary search for ${item.lookupType}-${item.stationId}, timestamp=${item.timestamp}, latest=${latest}`);
+              const submitBlock  = await blockAtTimestamp(provider, item.timestamp, latest);
+              console.debug(`[useEvents] submitBlock=${submitBlock}`);
         candidate = await firstBlockWhere(submitBlock, latest, async (b) => {
           try {
             const r = await contract.getResult(item.stationId, { blockTag: b });
             return Number(r.status) === targetStatus;
           } catch (err) {
-            // Station not registered yet at this block — treat as "not yet"
             if (err?.code === "CALL_EXCEPTION") return false;
             throw err;
           }
         });
+        console.debug(`[useEvents] binary search ${item.lookupType}-${item.stationId} → block`, candidate);
       }
-    } catch (err) {
-      console.warn(`Block location failed for ${item.lookupType}-${item.stationId}:`, err);
+} catch (err) {
+      console.warn(`[useEvents] block location failed ${item.lookupType}-${item.stationId}:`, err);
       candidate = null;
     }
 
-    // 2. Build the getLogs windows to try (each ≤ 10 blocks for the free tier).
-    //    Binary search is exact, so the centered window should hit on the
-    //    first try; the two neighbours are just a safety margin.
+    // 2. Build getLogs windows (each <= 10 blocks for Alchemy free tier).
     const windows = [];
     if (candidate != null) {
       windows.push([Math.max(DEPLOY_BLOCK, candidate - 4), Math.min(latest, candidate + 5)]);
       windows.push([Math.max(DEPLOY_BLOCK, candidate - 14), Math.max(DEPLOY_BLOCK, candidate - 5)]);
       windows.push([Math.min(latest, candidate + 6), Math.min(latest, candidate + 15)]);
     } else {
-      // Fallback: bounded backward scan from the tip. Covers "locked"
-      // lookups (no state getter wired up yet) and binary-search failures.
       let cursor = latest;
       for (let i = 0; i < FALLBACK_MAX_CHUNKS && cursor >= DEPLOY_BLOCK; i++) {
         const from = Math.max(DEPLOY_BLOCK, cursor - CHUNK);
@@ -204,35 +213,48 @@ export function useEvents() {
       }
     }
 
-    // 3. Pull and parse the log.
+    // 3. Pull, parse, and return the matching log.
     for (const [from, to] of windows) {
       if (from > to) continue;
       try {
+        const topics = isCorrectionExecuted ? [topic0] : [topic0, topic1];
+        console.debug(`[useEvents] getLogs [${from},${to}] for ${item.lookupType}-${item.stationId}`);
         const logs = await withRetry(() => provider.getLogs({
-          address, fromBlock: from, toBlock: to,
-          topics: [topic0, topic1],
+          address, fromBlock: from, toBlock: to, topics,
         }));
-        if (logs.length > 0) {
-          const log = logs[logs.length - 1]; // most recent match in this window
-          const parsed = contract.interface.parseLog(log);
-          return {
-            blockNumber: log.blockNumber,
-            txHash: log.transactionHash,
-            officer:
-              eventName === "ResultSubmitted"    ? shortAddress(parsed.args.officer) :
-              eventName === "ResultConfirmed"    ? shortAddress(parsed.args.returningOfficer) :
-              eventName === "ResultFlagged"      ? shortAddress(parsed.args.flaggedBy) :
-              eventName === "ConstituencyLocked" ? shortAddress(parsed.args.returningOfficer) :
-              null,
-            reason: eventName === "ResultFlagged" ? parsed.args.reason : undefined,
-          };
-        }
+        console.debug(`[useEvents] got ${logs.length} logs`);
+
+        const matchingLogs = isCorrectionExecuted
+          ? logs.filter(l => {
+              try {
+                const p = contract.interface.parseLog(l);
+                return p?.args?.stationId === item.stationId;
+              } catch { return false; }
+            })
+          : logs;
+
+        if (matchingLogs.length === 0) { await sleep(REQUEST_DELAY); continue; }
+        const log    = matchingLogs[matchingLogs.length - 1];
+        const parsed = contract.interface.parseLog(log);
+        console.debug(`[useEvents] FOUND ${item.lookupType}-${item.stationId} tx=${log.transactionHash} block=${log.blockNumber}`);
+        return {
+          blockNumber: log.blockNumber,
+          txHash:      log.transactionHash,
+          officer:
+            eventName === "ResultSubmitted"    ? shortAddress(parsed.args.officer) :
+            eventName === "ResultConfirmed"    ? shortAddress(parsed.args.returningOfficer) :
+            eventName === "ResultFlagged"      ? shortAddress(parsed.args.flaggedBy) :
+            eventName === "ConstituencyLocked" ? shortAddress(parsed.args.returningOfficer) :
+            null,
+          reason: eventName === "ResultFlagged" ? parsed.args.reason : undefined,
+        };
       } catch (err) {
-        console.warn(`getLogs window [${from}, ${to}] failed:`, err);
+        console.warn(`[useEvents] getLogs [${from},${to}] failed:`, err.message);
       }
       await sleep(REQUEST_DELAY);
     }
-    return null; // not found
+    console.warn(`[useEvents] findLog exhausted all windows for ${item.lookupType}-${item.stationId}`);
+    return null;
   }, []);
 
   // ── Live tail: small, always-safe range for brand-new activity ─────────
@@ -241,7 +263,7 @@ export function useEvents() {
   const pollRecent = useCallback(async (contract, from, to) => {
     const provider = contract.runner.provider;
     const address = await contract.getAddress();
-    const names = ["ResultSubmitted", "ResultConfirmed", "ResultFlagged", "ConstituencyLocked"];
+    const names = ["ResultSubmitted", "ResultConfirmed", "ResultFlagged", "CorrectionExecuted", "ConstituencyLocked"];
     const topicHashes = names.map(n => contract.interface.getEvent(n).topicHash);
 
     const logs = await provider.getLogs({
@@ -291,6 +313,12 @@ export function useEvents() {
         items.push({ ...base, type: "ResultFlagged", style: "flag", stationId: sid,
           text: `${sid} flagged — ${parsed.args.reason}`, officer: shortAddress(parsed.args.flaggedBy),
           ipfsHash: idToIpfs.get(sid) });
+      } else if (parsed.name === "CorrectionExecuted") {
+        const sid = parsed.args.stationId;
+        if (!sid) continue;
+        items.push({ ...base, type: "CorrectionExecuted", style: "green", stationId: sid,
+          text: `${sid} correction executed`, officer: null,
+          ipfsHash: idToIpfs.get(sid) });
       } else if (parsed.name === "ConstituencyLocked") {
         const cname = hashToConst.get(log.topics[1]);
         if (!cname) continue;
@@ -339,9 +367,11 @@ export function useEvents() {
         //    per device, ever.
         const cache = loadCache();
         const toEnrich = baseline.filter(it => it.lookupType);
+        console.debug(`[useEvents] toEnrich:`, toEnrich.map(it => `${it.lookupType}-${it.stationId}`));
         for (const item of toEnrich) {
           const cacheKey = `${item.lookupType}-${item.stationId}-${item.timestamp}`;
           let found = cache[cacheKey] || null;
+          console.debug(`[useEvents] enriching ${cacheKey}, cached=${!!found}`);
 
           if (!found) {
             found = await findLog(contract, item, latest);
@@ -379,12 +409,21 @@ export function useEvents() {
   }, [buildBaseline, findLog, pollRecent, mergeAndSet]);
 
   useEffect(() => {
-    if (!initialRanOnce.current) {
-      initialRanOnce.current = true;
-      poll(true);
-    }
-    const interval = setInterval(() => poll(false), 30000);
-    return () => clearInterval(interval);
+    let cancelled = false;
+    const run = async () => {
+      if (!initialRanOnce.current) {
+        initialRanOnce.current = true;
+        if (!cancelled) await poll(true);
+      }
+    };
+    run();
+    const interval = setInterval(() => { if (!cancelled) poll(false); }, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      // Allow re-run if component remounts (Strict Mode)
+      initialRanOnce.current = false;
+    };
   }, [poll]);
 
   return { events, loading };
