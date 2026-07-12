@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { getReadOnlyContract } from "../utils/contract.js";
+import { getReadOnlyContract, ROLES } from "../utils/contract.js";
 import { shortAddress } from "../utils/format.js";
 import { ethers } from "ethers";
 
@@ -9,7 +9,16 @@ const FALLBACK_MAX_CHUNKS = 20; // bounded backward scan, only used when binary 
 const REQUEST_DELAY = 250;     // ms between getLogs requests
 const BSEARCH_DELAY = 60;      // ms between binary-search steps (getBlock / eth_call are cheap)
 const DEPLOY_BLOCK = 41487461; // floor — never scan earlier than this
-const CACHE_KEY = "ecg_audit_log_cache_v1";
+const CACHE_KEY = "ecg_audit_log_cache_v2"; // bumped: older cache entries predate the ipfsHash/CorrectionExecuted/locked fixes
+const MAX_CORRECTIONS_SCAN = 500; // correction IDs are sequential from 0
+
+// RETURNING_OFFICER_ROLE / SENIOR_EC_OFFICER_ROLE are `public constant` on
+// ElectionCollation.sol itself (not on IElectionCollation), so their
+// auto-generated getters aren't in the frontend's hand-written ABI —
+// contract.RETURNING_OFFICER_ROLE() is "not a function" even though
+// hasRole() works fine. Reuse the hashes contract.js already computes
+// locally (ROLES.RETURNING / ROLES.SENIOR) instead of calling that getter
+// or re-deriving the hash a second time here.
 
 const STATUS_LABEL = {
   0: null,               // Pending — the submission itself is the event
@@ -29,8 +38,15 @@ const EVENT_LOOKUP = {
   submit:    { eventName: "ResultSubmitted",    indexedFrom: (stationId) => stationId },
   confirmed: { eventName: "ResultConfirmed",    indexedFrom: (stationId) => stationId },
   flagged:   { eventName: "ResultFlagged",      indexedFrom: (stationId) => stationId },
+  // NOTE: CorrectionExecuted's `stationId` param is `string indexed` too —
+  // handled as a special case in findLog (matched via topic2), see
+  // isCorrectionExecuted below, not through this generic table.
   corrected: { eventName: "CorrectionExecuted", indexedFrom: (stationId) => stationId },
   locked:    { eventName: "ConstituencyLocked", indexedFrom: (constituencyName) => constituencyName },
+  // CorrectionApproved indexes correctionId (uint256), not a string —
+  // handled as a special case in findLog, see isApprovalEvent below.
+  corrApprovedRO:      { eventName: "CorrectionApproved", indexedFrom: null },
+  corrApprovedSenior:  { eventName: "CorrectionApproved", indexedFrom: null },
 };
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -45,9 +61,8 @@ async function withRetry(fn, tries = 3) {
 }
 
 // ── localStorage cache ──────────────────────────────────────────────────
-// Mined events are immutable, so once a (type, station, submittedAt) tuple
+// Mined events are immutable, so once a (type, station, timestamp) tuple
 // has been resolved to a tx hash it never needs to be looked up again.
-// submittedAt is part of the key so a re-submission invalidates old entries.
 function loadCache() {
   try { return JSON.parse(localStorage.getItem(CACHE_KEY)) || {}; }
   catch { return {}; }
@@ -74,9 +89,7 @@ async function blockAtTimestamp(provider, ts, latest) {
 }
 
 // First block in [lo, hi] where predicate(block) is true. The predicate
-// must be monotone (false...false, true...true) across the range — which
-// "state equals its current value" is, as long as that value was reached
-// once and kept (true for confirm/flag on top of a given submission).
+// must be monotone (false...false, true...true) across the range.
 async function firstBlockWhere(lo, hi, predicate) {
   while (lo < hi) {
     const mid = Math.floor((lo + hi) / 2);
@@ -94,8 +107,8 @@ export function useEvents() {
   const initialRanOnce = useRef(false);
 
   // ── Baseline: reconstruct current state from live contract data ────────
-  // Works instantly regardless of how old a submission is, since it reads
-  // current state via getResult() rather than depending on log range limits.
+  // Works instantly regardless of how old an event is, since it reads
+  // current state rather than depending on log range limits.
   const buildBaseline = useCallback(async (contract) => {
     const ids = await contract.getAllStationIds();
     const results = await Promise.all(ids.map(id => contract.getResult(id)));
@@ -126,6 +139,25 @@ export function useEvents() {
 
       const label = STATUS_LABEL[status];
       if (label) {
+        // A station currently CORRECTED necessarily passed through FLAGGED
+        // first — reconstruct that historical event even though it's no
+        // longer the current status (getResult only reports current state).
+        if (status === 3) {
+          push({
+            key: `flagged-${r.stationId}`,
+            lookupType: "flagged",
+            stationId: r.stationId,
+            type: "ResultFlagged",
+            style: "flag",
+            text: `${r.stationId} flagged`,
+            officer: null, // resolved from the event log
+            ipfsHash: null, // pre-correction Pink Sheet is no longer the current CID
+            blockNumber: 0,
+            txHash: null,
+            timestamp: Number(r.submittedAt),
+          }, `flagged-${r.stationId}`);
+        }
+
         const lookupType = label === "confirmed" ? "confirmed" : label === "flagged" ? "flagged" : label === "corrected" ? "corrected" : null;
         push({
           key: `${label}-${r.stationId}`,
@@ -142,46 +174,139 @@ export function useEvents() {
         }, `${label}-${r.stationId}`);
       }
     }
+
+    // ── Reconstruct ConstituencyLocked rows ───────────────────────────────
+    // Locking isn't reflected on the station result at all, only on the
+    // constituency struct — read it directly the same way.
+    const constNames = await contract.getAllConstituencies();
+    const constData = await Promise.all(constNames.map(name => contract.getConstituency(name)));
+    constNames.forEach((name, i) => {
+      const cd = constData[i];
+      if (cd.locked) {
+        push({
+          key: `locked-${name}`,
+          lookupType: "locked",
+          stationId: name, // reused as the display/lookup key for constituencies
+          type: "ConstituencyLocked",
+          style: "lock",
+          text: `${name} constituency locked`,
+          officer: shortAddress(cd.lockedBy), // available directly, no lookup needed
+          ipfsHash: null,
+          blockNumber: 0,
+          txHash: null,
+          timestamp: Number(cd.lockedAt),
+        }, `locked-${name}`);
+      }
+    });
+
+    // ── Reconstruct CorrectionApproved rows (both officers) ───────────────
+    // Approver addresses aren't stored anywhere in state — only the two
+    // roApproved/seniorApproved booleans are — so we still need the event
+    // log for each, but we first need to find which correctionId belongs
+    // to each corrected station by scanning getCorrection() sequentially.
+    const correctedStations = results.filter(r => Number(r.status) === 3);
+    if (correctedStations.length > 0) {
+      const correctedIds = new Set(correctedStations.map(r => r.stationId));
+      const foundFor = new Set();
+      for (let id = 0; id < MAX_CORRECTIONS_SCAN && foundFor.size < correctedIds.size; id++) {
+        let corr;
+        try { corr = await contract.getCorrection(id); }
+        catch { break; }
+        if (Number(corr.requestedAt) === 0) break;
+        if (!corr.executed) continue;
+        if (!correctedIds.has(corr.stationId)) continue;
+
+        foundFor.add(corr.stationId);
+
+        push({
+          key: `corrApprovedRO-${corr.stationId}`,
+          lookupType: "corrApprovedRO",
+          stationId: corr.stationId,
+          type: "CorrectionApproved",
+          style: "green",
+          text: `${corr.stationId} correction approved (Returning Officer)`,
+          officer: null,
+          ipfsHash: corr.correctedIpfsHash, // the proposed doc this approval is signing off on
+          blockNumber: 0,
+          txHash: null,
+          timestamp: Number(corr.requestedAt),
+          correctionId: id,
+        }, `corrApprovedRO-${corr.stationId}`);
+
+        push({
+          key: `corrApprovedSenior-${corr.stationId}`,
+          lookupType: "corrApprovedSenior",
+          stationId: corr.stationId,
+          type: "CorrectionApproved",
+          style: "green",
+          text: `${corr.stationId} correction approved (Senior EC Officer)`,
+          officer: null,
+          ipfsHash: corr.correctedIpfsHash, // the proposed doc this approval is signing off on
+          blockNumber: 0,
+          txHash: null,
+          timestamp: Number(corr.requestedAt),
+          correctionId: id,
+        }, `corrApprovedSenior-${corr.stationId}`);
+      }
+    }
+
     return items;
   }, []);
 
-  // ── Targeted lookup: find the exact log for one known (type, id) pair ──
-  // Instead of scanning the chain backwards in 9-block chunks (which only
-  // covers ~6 minutes of Amoy history before the budget runs out), locate
-  // the block directly:
-  //   submit    → binary search block timestamps against submittedAt
-  //   confirmed → binary search historical getResult() state for the block
-  //   flagged     where status first equals its current value
-  // then fetch the log from a single tiny window around that block.
+  // ── Targeted lookup: find the exact log for one known item ─────────────
+  // Strategy per event type:
+  //   submit/locked      → binary search block timestamps against the
+  //                        known timestamp (submittedAt / lockedAt)
+  //   confirmed/flagged/
+  //   corrected          → binary search historical getResult() state
+  //   corrApprovedRO/
+  //   corrApprovedSenior → binary search historical getCorrection() state,
+  //                        then getLogs by correctionId, disambiguated by
+  //                        checking which role the approver's address holds
   const findLog = useCallback(async (contract, item, latest) => {
-    console.debug(`[useEvents] findLog called: lookupType=${item.lookupType} stationId=${item.stationId}`);
-    const { eventName, indexedFrom } = EVENT_LOOKUP[item.lookupType];
+    const { eventName } = EVENT_LOOKUP[item.lookupType];
     const provider = contract.runner.provider;
     const address = await contract.getAddress();
     const topic0 = contract.interface.getEvent(eventName).topicHash;
 
-    // CorrectionExecuted indexes correctionId (uint256) as topic1, not a
-    // string — cannot match via keccak256(stationId). Use topic0 only and
-    // filter by stationId from parsed args after fetching.
     const isCorrectionExecuted = eventName === "CorrectionExecuted";
-    const topic1 = isCorrectionExecuted
-      ? null
-      : ethers.keccak256(ethers.toUtf8Bytes(indexedFrom(item.stationId)));
+    const isApproval = eventName === "CorrectionApproved";
+
+    // topic layout depends on the event's indexed fields:
+    //   ResultSubmitted/Confirmed/Flagged, ConstituencyLocked
+    //     → topic1 = keccak256(stationId/constituency)  (string indexed)
+    //   CorrectionApproved(uint256 indexed correctionId, address indexed approvedBy, ...)
+    //     → topic1 = correctionId, which we DO have
+    //   CorrectionExecuted(uint256 indexed correctionId, string indexed stationId, ...)
+    //     → correctionId (topic1) isn't known for "corrected" baseline items,
+    //       but stationId (topic2) is — and since it's `string indexed`, the
+    //       raw string never appears in the log, only keccak256(stationId).
+    //       We match on topic2 directly rather than trying to parse it back
+    //       out of the log (parseLog returns an unresolvable Indexed hash
+    //       for indexed dynamic types, which can never equal item.stationId).
+    let topic1 = null;
+    let topic2 = null;
+    if (isCorrectionExecuted) {
+      topic2 = ethers.keccak256(ethers.toUtf8Bytes(item.stationId));
+    } else if (isApproval) {
+      topic1 = ethers.zeroPadValue(ethers.toBeHex(item.correctionId), 32);
+    } else {
+      const stationIdFn = EVENT_LOOKUP[item.lookupType].indexedFrom;
+      topic1 = ethers.keccak256(ethers.toUtf8Bytes(stationIdFn(item.stationId)));
+    }
 
     // 1. Locate the block containing the event via binary search.
     let candidate = null;
     try {
-      if (item.lookupType === "submit") {
+      if (item.lookupType === "submit" || item.lookupType === "locked") {
         candidate = await blockAtTimestamp(provider, item.timestamp, latest);
       } else if (
-              item.lookupType === "confirmed" ||
-              item.lookupType === "flagged"   ||
-              item.lookupType === "corrected"
-            ) {
-              const targetStatus = STATUS_OF_TYPE[item.lookupType];
-              console.debug(`[useEvents] starting binary search for ${item.lookupType}-${item.stationId}, timestamp=${item.timestamp}, latest=${latest}`);
-              const submitBlock  = await blockAtTimestamp(provider, item.timestamp, latest);
-              console.debug(`[useEvents] submitBlock=${submitBlock}`);
+        item.lookupType === "confirmed" ||
+        item.lookupType === "flagged"   ||
+        item.lookupType === "corrected"
+      ) {
+        const targetStatus = STATUS_OF_TYPE[item.lookupType];
+        const submitBlock  = await blockAtTimestamp(provider, item.timestamp, latest);
         candidate = await firstBlockWhere(submitBlock, latest, async (b) => {
           try {
             const r = await contract.getResult(item.stationId, { blockTag: b });
@@ -191,9 +316,20 @@ export function useEvents() {
             throw err;
           }
         });
-        console.debug(`[useEvents] binary search ${item.lookupType}-${item.stationId} → block`, candidate);
+      } else if (item.lookupType === "corrApprovedRO" || item.lookupType === "corrApprovedSenior") {
+        const wantRO = item.lookupType === "corrApprovedRO";
+        const startBlock = await blockAtTimestamp(provider, item.timestamp, latest);
+        candidate = await firstBlockWhere(startBlock, latest, async (b) => {
+          try {
+            const corr = await contract.getCorrection(item.correctionId, { blockTag: b });
+            return wantRO ? corr.roApproved : corr.seniorApproved;
+          } catch (err) {
+            if (err?.code === "CALL_EXCEPTION") return false;
+            throw err;
+          }
+        });
       }
-} catch (err) {
+    } catch (err) {
       console.warn(`[useEvents] block location failed ${item.lookupType}-${item.stationId}:`, err);
       candidate = null;
     }
@@ -213,30 +349,51 @@ export function useEvents() {
       }
     }
 
+    // Role hashes for approval disambiguation — shared with contract.js,
+    // see ROLES import above.
+    const roRoleHash = ROLES.RETURNING;
+    const seniorRoleHash = ROLES.SENIOR;
+
     // 3. Pull, parse, and return the matching log.
     for (const [from, to] of windows) {
       if (from > to) continue;
       try {
-        const topics = isCorrectionExecuted ? [topic0] : [topic0, topic1];
-        console.debug(`[useEvents] getLogs [${from},${to}] for ${item.lookupType}-${item.stationId}`);
+        const topics = isCorrectionExecuted ? [topic0, null, topic2] : [topic0, topic1];
         const logs = await withRetry(() => provider.getLogs({
           address, fromBlock: from, toBlock: to, topics,
         }));
-        console.debug(`[useEvents] got ${logs.length} logs`);
 
-        const matchingLogs = isCorrectionExecuted
-          ? logs.filter(l => {
-              try {
-                const p = contract.interface.parseLog(l);
-                return p?.args?.stationId === item.stationId;
-              } catch { return false; }
-            })
-          : logs;
+        let matchingLogs = logs;
+
+        if (isApproval) {
+          // Same correctionId can produce two logs (RO + Senior) — pick
+          // the one whose signer actually holds the role we want.
+          const wantRO = item.lookupType === "corrApprovedRO";
+          const filtered = [];
+          for (const l of logs) {
+            try {
+              const p = contract.interface.parseLog(l);
+              const approver = p.args.approvedBy;
+              const isRO = await contract.hasRole(roRoleHash, approver);
+              const isSenior = await contract.hasRole(seniorRoleHash, approver);
+              if (wantRO && isRO) filtered.push(l);
+              if (!wantRO && isSenior && !isRO) filtered.push(l);
+              // Dual-role wallets: if a wallet holds both, it can only ever
+              // land in the RO branch on-chain (see approveCorrection), so
+              // it is never the Senior approval — excluded above correctly.
+            } catch { /* skip unparsable */ }
+          }
+          matchingLogs = filtered;
+        }
+        // isCorrectionExecuted needs no further filtering: topic0 + topic2
+        // (keccak256 of the exact stationId) already uniquely identifies
+        // the log — parsed.args.stationId can't be used for this since
+        // indexed strings never round-trip back to plain text.
 
         if (matchingLogs.length === 0) { await sleep(REQUEST_DELAY); continue; }
+
         const log    = matchingLogs[matchingLogs.length - 1];
         const parsed = contract.interface.parseLog(log);
-        console.debug(`[useEvents] FOUND ${item.lookupType}-${item.stationId} tx=${log.transactionHash} block=${log.blockNumber}`);
         return {
           blockNumber: log.blockNumber,
           txHash:      log.transactionHash,
@@ -245,7 +402,13 @@ export function useEvents() {
             eventName === "ResultConfirmed"    ? shortAddress(parsed.args.returningOfficer) :
             eventName === "ResultFlagged"      ? shortAddress(parsed.args.flaggedBy) :
             eventName === "ConstituencyLocked" ? shortAddress(parsed.args.returningOfficer) :
-            null,
+            eventName === "CorrectionApproved" ? shortAddress(parsed.args.approvedBy) :
+            null, // CorrectionExecuted has no actor field on-chain — expected null
+          // Only ResultSubmitted carries an ipfsHash arg, and it's non-indexed
+          // (unlike stationId), so it round-trips through parseLog just fine —
+          // this is the ORIGINAL Pink Sheet, distinct from the current
+          // (possibly corrected) one that getResult() would return.
+          ipfsHash: eventName === "ResultSubmitted" ? parsed.args.ipfsHash : undefined,
           reason: eventName === "ResultFlagged" ? parsed.args.reason : undefined,
         };
       } catch (err) {
@@ -253,17 +416,14 @@ export function useEvents() {
       }
       await sleep(REQUEST_DELAY);
     }
-    console.warn(`[useEvents] findLog exhausted all windows for ${item.lookupType}-${item.stationId}`);
     return null;
   }, []);
 
   // ── Live tail: small, always-safe range for brand-new activity ─────────
-  // Uses the combined-topics approach since we're not matching specific
-  // known IDs here — anything new in this narrow range is genuinely new.
   const pollRecent = useCallback(async (contract, from, to) => {
     const provider = contract.runner.provider;
     const address = await contract.getAddress();
-    const names = ["ResultSubmitted", "ResultConfirmed", "ResultFlagged", "CorrectionExecuted", "ConstituencyLocked"];
+    const names = ["ResultSubmitted", "ResultConfirmed", "ResultFlagged", "CorrectionExecuted", "CorrectionApproved", "ConstituencyLocked"];
     const topicHashes = names.map(n => contract.interface.getEvent(n).topicHash);
 
     const logs = await provider.getLogs({
@@ -271,10 +431,6 @@ export function useEvents() {
       topics: [topicHashes],
     });
 
-    // For the live tail we don't yet know the plaintext stationId (it's
-    // hashed in the topic), so we resolve it by cross-checking against the
-    // contract's current station list — fine here since this range is tiny
-    // and only runs every 30s for brand-new activity.
     if (logs.length === 0) return [];
 
     const ids = await contract.getAllStationIds();
@@ -288,6 +444,11 @@ export function useEvents() {
       constNames.map(name => [ethers.keccak256(ethers.toUtf8Bytes(name)), name])
     );
 
+    // Role hashes for approval disambiguation — shared with contract.js,
+    // see ROLES import above.
+    const roRoleHash = ROLES.RETURNING;
+    const seniorRoleHash = ROLES.SENIOR;
+
     const items = [];
     for (const log of logs) {
       let parsed;
@@ -299,30 +460,54 @@ export function useEvents() {
       if (parsed.name === "ResultSubmitted") {
         const sid = hashToStation.get(log.topics[1]);
         if (!sid) continue;
-        items.push({ ...base, type: "ResultSubmitted", style: "green", stationId: sid,
+        items.push({ ...base, type: "ResultSubmitted", style: "green", stationId: sid, lookupType: "submit",
           text: `${sid} result submitted`, officer: shortAddress(parsed.args.officer), ipfsHash: parsed.args.ipfsHash });
       } else if (parsed.name === "ResultConfirmed") {
         const sid = hashToStation.get(log.topics[1]);
         if (!sid) continue;
-        items.push({ ...base, type: "ResultConfirmed", style: "green", stationId: sid,
+        items.push({ ...base, type: "ResultConfirmed", style: "green", stationId: sid, lookupType: "confirmed",
           text: `${sid} confirmed`, officer: shortAddress(parsed.args.returningOfficer),
           ipfsHash: idToIpfs.get(sid) });
       } else if (parsed.name === "ResultFlagged") {
         const sid = hashToStation.get(log.topics[1]);
         if (!sid) continue;
-        items.push({ ...base, type: "ResultFlagged", style: "flag", stationId: sid,
+        items.push({ ...base, type: "ResultFlagged", style: "flag", stationId: sid, lookupType: "flagged",
           text: `${sid} flagged — ${parsed.args.reason}`, officer: shortAddress(parsed.args.flaggedBy),
           ipfsHash: idToIpfs.get(sid) });
       } else if (parsed.name === "CorrectionExecuted") {
-        const sid = parsed.args.stationId;
+        // stationId is `string indexed` — the raw string never lands in the
+        // log data, only keccak256(stationId) in topics[2] (topics[1] is
+        // correctionId). Resolve it the same way ResultSubmitted/Confirmed/
+        // Flagged do for their indexed stationId, just off topics[2] instead
+        // of topics[1]. parsed.args.stationId is NOT usable here — for an
+        // indexed dynamic type it comes back as an unresolvable hash wrapper.
+        const sid = hashToStation.get(log.topics[2]);
         if (!sid) continue;
-        items.push({ ...base, type: "CorrectionExecuted", style: "green", stationId: sid,
+        items.push({ ...base, type: "CorrectionExecuted", style: "green", stationId: sid, lookupType: "corrected",
           text: `${sid} correction executed`, officer: null,
           ipfsHash: idToIpfs.get(sid) });
+      } else if (parsed.name === "CorrectionApproved") {
+        const approver = parsed.args.approvedBy;
+        const isRO = await contract.hasRole(roRoleHash, approver);
+        const isSenior = await contract.hasRole(seniorRoleHash, approver);
+        const roleLabel = isRO ? "Returning Officer" : isSenior ? "Senior EC Officer" : "Officer";
+        // stationId isn't in this event — resolve via the correction struct,
+        // which also carries the proposed doc hash this approval is for.
+        let sid = null, correctedIpfs = null;
+        try {
+          const corr = await contract.getCorrection(parsed.args.correctionId);
+          sid = corr.stationId;
+          correctedIpfs = corr.correctedIpfsHash;
+        } catch { continue; }
+        if (!sid) continue;
+        items.push({ ...base, type: "CorrectionApproved", style: "green", stationId: sid,
+          lookupType: isRO ? "corrApprovedRO" : "corrApprovedSenior",
+          text: `${sid} correction approved (${roleLabel})`, officer: shortAddress(approver),
+          ipfsHash: correctedIpfs });
       } else if (parsed.name === "ConstituencyLocked") {
         const cname = hashToConst.get(log.topics[1]);
         if (!cname) continue;
-        items.push({ ...base, type: "ConstituencyLocked", style: "lock", stationId: cname,
+        items.push({ ...base, type: "ConstituencyLocked", style: "lock", stationId: cname, lookupType: "locked",
           text: `${cname} constituency locked`, officer: shortAddress(parsed.args.returningOfficer) });
       }
     }
@@ -334,7 +519,11 @@ export function useEvents() {
       const merged = [...incoming, ...prev];
       const byKey = new Map();
       for (const it of merged) {
-        const key = `${it.type}-${it.stationId}`;
+        // lookupType stays constant across baseline → enriched transitions
+        // (unlike text, which gains a reason suffix for flagged rows), so
+        // it's the correct stable identity for dedup. RO/Senior approvals
+        // share type+stationId but have distinct lookupTypes.
+        const key = `${it.type}-${it.stationId}-${it.lookupType || ""}`;
         const existing = byKey.get(key);
         if (!existing) {
           byKey.set(key, it);
@@ -355,23 +544,21 @@ export function useEvents() {
       const latest   = await provider.getBlockNumber();
 
       if (initial) {
-        // 1. Instant baseline from current contract state — always correct
         const baseline = await buildBaseline(contract);
         mergeAndSet(baseline, false);
         setLoading(false);
         lastBlockRef.current = latest;
 
-        // 2. Enrichment: for each baseline item still missing a tx hash,
-        //    locate its exact log via binary search (see findLog). Results
-        //    are cached in localStorage so this cost is paid once per event
-        //    per device, ever.
         const cache = loadCache();
         const toEnrich = baseline.filter(it => it.lookupType);
-        console.debug(`[useEvents] toEnrich:`, toEnrich.map(it => `${it.lookupType}-${it.stationId}`));
+        // Populated as "submit" items resolve, so the historical "flagged"
+        // row for the same station (always pushed after "submit" in
+        // buildBaseline, so always processed after it here) can borrow the
+        // true original Pink Sheet hash instead of showing nothing.
+        const originalIpfsByStation = new Map();
         for (const item of toEnrich) {
           const cacheKey = `${item.lookupType}-${item.stationId}-${item.timestamp}`;
           let found = cache[cacheKey] || null;
-          console.debug(`[useEvents] enriching ${cacheKey}, cached=${!!found}`);
 
           if (!found) {
             found = await findLog(contract, item, latest);
@@ -383,11 +570,24 @@ export function useEvents() {
           }
 
           if (found) {
+            if (item.lookupType === "submit" && found.ipfsHash) {
+              originalIpfsByStation.set(item.stationId, found.ipfsHash);
+            }
+
+            // Historical flagged row (station has since been corrected) —
+            // baseline deliberately left ipfsHash null since the current
+            // getResult() value would be the POST-correction doc, not the
+            // one under review at flag-time. Backfill with the real one now.
+            const isHistoricalFlag = item.lookupType === "flagged" && item.ipfsHash == null;
+            const resolvedIpfs = found.ipfsHash
+              || (isHistoricalFlag ? originalIpfsByStation.get(item.stationId) : null);
+
             mergeAndSet([{
               ...item,
               blockNumber: found.blockNumber,
               txHash: found.txHash,
               officer: found.officer || item.officer,
+              ipfsHash: resolvedIpfs || item.ipfsHash,
               text: found.reason ? `${item.stationId} flagged — ${found.reason}` : item.text,
             }], true);
           }
@@ -395,7 +595,6 @@ export function useEvents() {
         return;
       }
 
-      // Incremental tail poll for brand-new activity — small, safe range
       const from = Math.max(lastBlockRef.current + 1, latest - CHUNK);
       lastBlockRef.current = latest;
       if (from > latest) return;
@@ -409,21 +608,12 @@ export function useEvents() {
   }, [buildBaseline, findLog, pollRecent, mergeAndSet]);
 
   useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      if (!initialRanOnce.current) {
-        initialRanOnce.current = true;
-        if (!cancelled) await poll(true);
-      }
-    };
-    run();
-    const interval = setInterval(() => { if (!cancelled) poll(false); }, 30000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-      // Allow re-run if component remounts (Strict Mode)
-      initialRanOnce.current = false;
-    };
+    if (!initialRanOnce.current) {
+      initialRanOnce.current = true;
+      poll(true);
+    }
+    const interval = setInterval(() => poll(false), 30000);
+    return () => clearInterval(interval);
   }, [poll]);
 
   return { events, loading };

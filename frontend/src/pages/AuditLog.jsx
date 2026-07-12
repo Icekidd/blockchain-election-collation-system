@@ -69,7 +69,7 @@ export default function AuditLog() {
                   : null;
 
                 return (
-                  <tr key={`${e.type}-${e.stationId}`}>
+                  <tr key={`${e.type}-${e.stationId}-${e.lookupType || e.officer || i}`}>
                     <td>
                       <span className={"pill " + (e.style === "green" ? "ok" : e.style === "flag" ? "flag" : "lock")}>
                         {e.type}
