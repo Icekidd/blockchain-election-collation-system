@@ -1,19 +1,17 @@
 import React, { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { getReadOnlyContract, ELECTION_STATUS } from "../utils/contract.js";
-import { useCandidates } from "../hooks/useCandidates.js";
 import { formatNumber, percentage } from "../utils/format.js";
 
 const CONTRACT_ADDR = import.meta.env.VITE_CONTRACT_ADDRESS;
 
 export default function PublicResults() {
-  const { candidates: CANDIDATES } = useCandidates();
+  const [candidates,   setCandidates]   = useState([]);
   const [totals,       setTotals]       = useState([]);
   const [grandTotal,   setGrandTotal]   = useState(0n);
   const [status,       setStatus]       = useState(null);
-  const [stationCount, setStationCount] = useState(0);
-  const [constCount,   setConstCount]   = useState(0);
-  const [lockedCount,  setLockedCount]  = useState(0);
+  const [registered,   setRegistered]   = useState(0);   // stations registered
+  const [submitted,    setSubmitted]    = useState(0);   // stations submitted
   const [lastUpdated,  setLastUpdated]  = useState(null);
   const [loading,      setLoading]      = useState(true);
 
@@ -21,26 +19,30 @@ export default function PublicResults() {
     async function load() {
       try {
         const c = getReadOnlyContract();
-        const [ids, constNames, electionStatus] = await Promise.all([
-          c.getAllStationIds(),
-          c.getAllConstituencies(),
-          c.getElectionStatus(),
+
+        const [regIds, subIds, electionStatus, candCount] = await Promise.all([
+          c.getAllStationIds(),        // registered stations
+          c.getSubmittedStationIds(),  // submitted stations
+          c.status(),
+          c.getCandidateCount(),
         ]);
-        setStationCount(ids.length);
-        setConstCount(constNames.length);
+        setRegistered(regIds.length);
+        setSubmitted(subIds.length);
         setStatus(Number(electionStatus));
 
-        const grand = new Array(Math.max(CANDIDATES.length, 4)).fill(0n);
-        let locked = 0;
-        for (const name of constNames) {
-          const [t] = await c.getConstituencyTotal(name);
-          const info = await c.getConstituency(name);
-          if (info.locked) locked++;
-          t.forEach((v, i) => { grand[i] = (grand[i] || 0n) + BigInt(v); });
+        // Candidates
+        const cs = [];
+        for (let i = 0; i < Number(candCount); i++) {
+          const cand = await c.candidates(i);
+          cs.push({ name: cand.name, party: cand.party, color: cand.color });
         }
-        setLockedCount(locked);
-        setTotals(grand);
-        setGrandTotal(grand.reduce((s, v) => s + v, 0n));
+        setCandidates(cs);
+
+        // National totals in one call
+        const nat = await c.getNationalTotals();
+        const t = nat.map(v => BigInt(v));
+        setTotals(t);
+        setGrandTotal(t.reduce((s, v) => s + v, 0n));
         setLastUpdated(new Date());
       } catch (err) {
         console.error(err);
@@ -51,16 +53,16 @@ export default function PublicResults() {
     load();
     const interval = setInterval(load, 30000);
     return () => clearInterval(interval);
-  }, [CANDIDATES.length]);
+  }, []);
 
-  const ranked = CANDIDATES
+  const ranked = candidates
     .map((c, i) => ({ ...c, votes: totals[i] || 0n }))
     .sort((a, b) => (b.votes > a.votes ? 1 : b.votes < a.votes ? -1 : 0));
 
-  const leader    = ranked[0];
-  const runnerUp  = ranked[1];
-  const margin    = leader && runnerUp ? leader.votes - runnerUp.votes : 0n;
-  const hasVotes  = grandTotal > 0n;
+  const leader   = ranked[0];
+  const runnerUp = ranked[1];
+  const margin   = leader && runnerUp ? leader.votes - runnerUp.votes : 0n;
+  const hasVotes = grandTotal > 0n;
 
   if (loading) return (
     <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -79,7 +81,7 @@ export default function PublicResults() {
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
 
-      {/* ── Hero ─────────────────────────────────────────────── */}
+      {/* Hero */}
       <div style={{
         background: "radial-gradient(ellipse 70% 60% at 50% 0%, rgba(0,107,63,0.16) 0%, transparent 70%)",
         borderBottom: "1px solid var(--border)",
@@ -112,9 +114,8 @@ export default function PublicResults() {
           <div style={{ display: "flex", justifyContent: "center", gap: "clamp(18px, 5vw, 48px)", marginTop: "30px", flexWrap: "wrap" }}>
             {[
               [formatNumber(grandTotal), "votes counted"],
-              [stationCount,             "stations reported"],
-              [`${constCount} / 275`,    "constituencies"],
-              [lockedCount,              "locked"],
+              [submitted,                "stations reported"],
+              [registered,               "stations registered"],
             ].map(([value, label]) => (
               <div key={label} style={{ textAlign: "center" }}>
                 <div style={{ fontSize: "clamp(18px, 3vw, 26px)", fontWeight: 700, color: "var(--bright)", fontFamily: "DM Mono,monospace" }}>{value}</div>
@@ -125,10 +126,10 @@ export default function PublicResults() {
         </div>
       </div>
 
-      {/* ── Results ──────────────────────────────────────────── */}
+      {/* Results */}
       <div style={{ maxWidth: "820px", margin: "0 auto", padding: "36px 24px 48px" }}>
 
-        {CANDIDATES.length === 0 ? (
+        {candidates.length === 0 ? (
           <div className="panel" style={{ textAlign: "center", padding: "48px" }}>
             <div style={{ fontSize: "14px", color: "var(--bright)", fontWeight: 600, marginBottom: "6px" }}>Ballot not yet published</div>
             <div style={{ fontSize: "12px", color: "var(--text2)" }}>Candidates will appear here once the EC finalises the ballot.</div>
@@ -141,7 +142,7 @@ export default function PublicResults() {
                 borderRadius: "var(--r-md)", padding: "11px 16px", marginBottom: "20px",
                 fontSize: "12px", color: "var(--gold)", textAlign: "center",
               }}>
-                Counting has not started — results will appear live as constituencies confirm.
+                Counting has not started — results will appear live as stations report.
               </div>
             )}
 
@@ -188,7 +189,7 @@ export default function PublicResults() {
               {ranked.map((c, rank) => {
                 const pct = hasVotes ? percentage(c.votes, grandTotal) : "0.0";
                 const isLeader = hasVotes && rank === 0;
-                if (isLeader) return null; // already in spotlight
+                if (isLeader) return null;
                 return (
                   <div key={c.party} style={{
                     background: "var(--surface)", border: "1px solid var(--border)",
@@ -229,31 +230,20 @@ export default function PublicResults() {
           </>
         )}
 
-        {/* ── Share via QR ──────────────────────────────────────────── */}
+        {/* Share via QR */}
         <div style={{
           marginTop: "24px", padding: "20px",
           background: "var(--surface)", border: "1px solid var(--border)",
           borderRadius: "var(--r-md)", textAlign: "center",
         }}>
-
-          <a href="/verify" style={{ fontSize: "11px", color: "var(--accent2)", textDecoration: "none", display: "inline-block", marginTop: "10px" }}>
+          <a href="/verify" style={{ fontSize: "11px", color: "var(--accent2)", textDecoration: "none", display: "inline-block", marginBottom: "10px" }}>
             Verify an individual polling station result →
           </a>
-
           <div style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--gold)", marginBottom: "12px" }}>
             Share These Results
           </div>
-          <div style={{
-            display: "inline-block", padding: "12px",
-            background: "#ffffff", borderRadius: "10px",
-          }}>
-            <QRCodeSVG
-              value={window.location.href}
-              size={140}
-              fgColor="#07110a"
-              bgColor="#ffffff"
-              level="M"
-            />
+          <div style={{ display: "inline-block", padding: "12px", background: "#ffffff", borderRadius: "10px" }}>
+            <QRCodeSVG value={window.location.href} size={140} fgColor="#07110a" bgColor="#ffffff" level="M" />
           </div>
           <div style={{ fontSize: "10px", color: "var(--text2)", marginTop: "10px", lineHeight: 1.6 }}>
             Scan to view live results on any phone — no app or wallet needed.<br />
@@ -261,7 +251,7 @@ export default function PublicResults() {
           </div>
         </div>
 
-        {/* ── Verification footer ─────────────────────────────── */}
+        {/* Verification footer */}
         <div style={{
           marginTop: "32px", padding: "18px 20px",
           background: "var(--surface)", border: "1px solid var(--border)",

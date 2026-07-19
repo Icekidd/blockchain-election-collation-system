@@ -1,10 +1,15 @@
 import React, { useState } from "react";
 import { useEvents } from "../hooks/useEvents.js";
 import { explorerTx, shortHash } from "../utils/format.js";
+import { ipfsUrl } from "../utils/ipfs.js";
 
-const FILTERS = ["All", "ResultSubmitted", "ResultConfirmed", "ResultFlagged", "CorrectionExecuted", "ConstituencyLocked"];
+const FILTERS = [
+  "All", "ResultSubmitted", "StationRegistered",
+  "OfficerApproved", "OfficerRejected", "PresidingOfficerRemoved",
+  "ReturningOfficerAssigned", "ReturningOfficerRemoved",
+  "CandidateAdded", "StatusChanged",
+];
 
-// Row is still waiting on the targeted log lookup (binary search) to finish
 const isEnriching = (e) => Boolean(e.lookupType) && !e.txHash;
 
 const Pending = () => (
@@ -24,7 +29,10 @@ export default function AuditLog() {
       <div className="page-header">
         <span className="eyebrow">Immutable Record</span>
         <h1 className="page-title">On-Chain Audit Log</h1>
-        <div className="page-sub">Every event pulled directly from the smart contract</div>
+        <div className="page-sub">
+          Every event pulled directly from the smart contract. Submitted results are final — there is
+          no confirm, flag, or correction step in this system.
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: "7px", marginBottom: "16px", flexWrap: "wrap" }}>
@@ -53,35 +61,25 @@ export default function AuditLog() {
             <thead>
               <tr>
                 <th>Event</th>
-                <th>Station / Constituency</th>
+                <th>Detail</th>
                 <th>Officer</th>
                 <th>Tx Hash</th>
                 <th>Block</th>
-                <th>IPFS</th>
+                <th>Record</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((e) => {
                 const pending = isEnriching(e);
-                // Reason lives in e.text after the "flagged — " separator
-                const flagReason = e.type === "ResultFlagged" && e.text?.includes("— ")
-                  ? e.text.split("— ").slice(1).join("— ")
-                  : null;
-
                 return (
-                  <tr key={`${e.type}-${e.stationId}-${e.lookupType || e.officer || i}`}>
+                  <tr key={e.key || `${e.type}-${e.stationId}`}>
                     <td>
                       <span className={"pill " + (e.style === "green" ? "ok" : e.style === "flag" ? "flag" : "lock")}>
                         {e.type}
                       </span>
                     </td>
-                    <td style={{ color: "var(--bright)", fontWeight: 600 }}>
-                      {e.stationId}
-                      {flagReason && (
-                        <div style={{ color: "var(--text2)", fontWeight: 400, fontSize: "10px", marginTop: "2px" }}>
-                          {flagReason}
-                        </div>
-                      )}
+                    <td style={{ color: "var(--bright)", fontWeight: 600, maxWidth: "320px" }}>
+                      {e.text || e.stationId}
                     </td>
                     <td style={{ color: "var(--text2)" }}>
                       {e.officer || (pending ? <Pending /> : "-")}
@@ -98,7 +96,7 @@ export default function AuditLog() {
                     </td>
                     <td>
                       {e.ipfsHash ? (
-                        <a href={"https://gateway.pinata.cloud/ipfs/" + e.ipfsHash} target="_blank" rel="noreferrer" style={{ color: "#a78bfa", textDecoration: "none" }}>
+                        <a href={ipfsUrl(e.ipfsHash)} target="_blank" rel="noreferrer" style={{ color: "#a78bfa", textDecoration: "none" }}>
                           {shortHash(e.ipfsHash)}
                         </a>
                       ) : "-"}

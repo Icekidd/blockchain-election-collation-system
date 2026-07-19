@@ -4,20 +4,22 @@ import { useWallet } from "../context/WalletContext.jsx";
 import { shortAddress } from "../utils/format.js";
 
 const ROLE_LABELS = {
-  PRESIDING: "Presiding Officer",
-  RETURNING: "Returning Officer",
-  SENIOR:    "Senior EC Officer",
+  PRESIDING_OFFICER: "Presiding Officer",
+  RETURNING_OFFICER: "Returning Officer",
+  EC_CHAIR:          "EC Chair",
 };
 
 const NAV_LINKS = [
-  { to: "/dashboard", label: "Dashboard",    roles: ["PRESIDING","RETURNING","SENIOR"] },
-  { to: "/submit",    label: "Submit Result",roles: ["PRESIDING"] },
-  { to: "/ro-review", label: "RO Review",    roles: ["RETURNING","SENIOR"] },
-  { to: "/audit",     label: "Audit Log",    roles: ["PRESIDING","RETURNING","SENIOR"] },
-  { to: "/dispute",   label: "Disputes",     roles: ["PRESIDING","RETURNING","SENIOR"] },
-  { to: "/map",      label: "Progress Map", roles: ["PRESIDING","RETURNING","SENIOR"] },
-  { to: "/officers", label: "Officers",     roles: ["SENIOR"] },
-  { to: "/candidates", label: "Candidates", roles: ["SENIOR"] },
+  { to: "/dashboard",       label: "Dashboard",     roles: ["PRESIDING_OFFICER","RETURNING_OFFICER","EC_CHAIR"] },
+  { to: "/assign-officers", label: "Assign ROs",    roles: ["EC_CHAIR"] },
+  { to: "/submit",          label: "Submit Result", roles: ["PRESIDING_OFFICER"] },
+  { to: "/ro-review",       label: "RO Review",     roles: ["RETURNING_OFFICER","EC_CHAIR"] },
+  { to: "/audit",           label: "Audit Log",     roles: ["PRESIDING_OFFICER","RETURNING_OFFICER","EC_CHAIR"] },
+  { to: "/map",             label: "Progress Map",  roles: ["PRESIDING_OFFICER","RETURNING_OFFICER","EC_CHAIR"] },
+  { to: "/officers",        label: "Officers",      roles: ["EC_CHAIR"] },
+  { to: "/candidates",      label: "Candidates",    roles: ["EC_CHAIR"] },
+  { to: "/station-setup", label: "Station Setup", roles: ["RETURNING_OFFICER"] },
+  { to: "/ro-officers", label: "Manage Officers", roles: ["RETURNING_OFFICER"] },
 ];
 
 export default function Navbar() {

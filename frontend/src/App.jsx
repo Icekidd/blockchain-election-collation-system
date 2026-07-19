@@ -7,15 +7,19 @@ import PublicResults from "./pages/PublicResults.jsx";
 import ConnectPage     from "./pages/ConnectPage.jsx";
 import Dashboard       from "./pages/Dashboard.jsx";
 import SubmitResult    from "./pages/SubmitResult.jsx";
-import ROReview        from "./pages/ROReview.jsx";
+// import ROReview        from "./pages/ROReview.jsx";
 import AuditLog        from "./pages/AuditLog.jsx";
-import DisputePage     from "./pages/DisputePage.jsx";
+// import DisputePage     from "./pages/DisputePage.jsx";
 import SuccessPage     from "./pages/SuccessPage.jsx";
 import ConstituencyMap   from "./pages/ConstituencyMap.jsx";
 import OfficerManagement from "./pages/OfficerManagement.jsx";
 import RegisterRequest   from "./pages/RegisterRequest.jsx";
 import CandidateManagement from "./pages/CandidateManagement.jsx";
 import VerifyResult from "./pages/VerifyResult.jsx";
+import AssignOfficers from "./pages/AssignOfficers.jsx";
+import StationSetup from "./pages/StationSetup.jsx";
+import ROOfficers from "./pages/ROOfficers.jsx";
+import OCRTest from "./pages/OCRTest.jsx";
 
 
 export default function App() {
@@ -30,15 +34,17 @@ export default function App() {
         <Route path="/officers"  element={<ProtectedRoute><OfficerManagement /></ProtectedRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/submit"    element={<ProtectedRoute><SubmitResult /></ProtectedRoute>} />
-        <Route path="/ro-review" element={<ProtectedRoute><ROReview /></ProtectedRoute>} />
+        {/* <Route path="/ro-review" element={<ProtectedRoute><ROReview /></ProtectedRoute>} /> */}
         <Route path="/audit"     element={<ProtectedRoute><AuditLog /></ProtectedRoute>} />
-        <Route path="/dispute"   element={<ProtectedRoute><DisputePage /></ProtectedRoute>} />
+        {/* <Route path="/dispute"   element={<ProtectedRoute><DisputePage /></ProtectedRoute>} /> */}
         <Route path="/success"   element={<ProtectedRoute><SuccessPage /></ProtectedRoute>} />
         <Route path="/map"      element={<ProtectedRoute><ConstituencyMap /></ProtectedRoute>} />
-        <Route path="/officers" element={<ProtectedRoute><OfficerManagement /></ProtectedRoute>} />
-        <Route path="/register" element={<RegisterRequest />} />
         <Route path="*"          element={<Navigate to="/" />} />
         <Route path="/verify" element={<VerifyResult />} />
+        <Route path="/assign-officers" element={<ProtectedRoute><AssignOfficers /></ProtectedRoute>} />
+        <Route path="/station-setup" element={<ProtectedRoute><StationSetup /></ProtectedRoute>} />
+        <Route path="/ro-officers" element={<ProtectedRoute><ROOfficers /></ProtectedRoute>} />
+        <Route path="/ocr-test" element={<OCRTest />} />
       </Routes>
     </WalletProvider>
   );

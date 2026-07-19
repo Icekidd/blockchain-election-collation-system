@@ -1,14 +1,15 @@
 import React, { useState } from "react";
-import { getReadOnlyContract, RESULT_STATUS } from "../utils/contract.js";
-import { useCandidates } from "../hooks/useCandidates.js";
-import { formatNumber, formatTimestamp, shortAddress, ipfsGateway } from "../utils/format.js";
+import { getReadOnlyContract } from "../utils/contract.js";
+import { ipfsUrl } from "../utils/ipfs.js";
+import { formatNumber, formatTimestamp, shortAddress } from "../utils/format.js";
 
 const CONTRACT_ADDR = import.meta.env.VITE_CONTRACT_ADDRESS;
 
 export default function VerifyResult() {
-  const { candidates: CANDIDATES } = useCandidates();
   const [stationId, setStationId] = useState("");
-  const [result,    setResult]    = useState(null);
+  const [result,    setResult]    = useState(null);   // on-chain Result
+  const [record,    setRecord]    = useState(null);   // the IPFS record JSON
+  const [candidates, setCandidates] = useState([]);   // resolved from record or chain
   const [error,     setError]     = useState("");
   const [loading,   setLoading]   = useState(false);
   const [searched,  setSearched]  = useState(false);
@@ -17,18 +18,30 @@ export default function VerifyResult() {
     const id = stationId.trim().toUpperCase();
     if (!id) { setError("Enter a polling station ID"); return; }
 
-    setLoading(true);
-    setError("");
-    setResult(null);
-    setSearched(false);
+    setLoading(true); setError(""); setResult(null); setRecord(null); setSearched(false);
 
     try {
       const c = getReadOnlyContract();
       const r = await c.getResult(id);
-      if (Number(r.submittedAt) === 0) {
-        setError(`No result found for station "${id}". Check the ID and try again — results only appear after a Presiding Officer submits them.`);
+      if (!r.exists || Number(r.submittedAt) === 0) {
+        setError(`No result found for station "${id}". Results only appear after a Presiding Officer submits them.`);
       } else {
         setResult(r);
+
+        // Resolve candidate names/parties/colors from the chain (for labels).
+        const count = Number(await c.getCandidateCount());
+        const cs = [];
+        for (let i = 0; i < count; i++) {
+          const cand = await c.candidates(i);
+          cs.push({ name: cand.name, party: cand.party, color: cand.color });
+        }
+        setCandidates(cs);
+
+        // Fetch the full verification record JSON from IPFS (image + agents).
+        try {
+          const res = await fetch(ipfsUrl(r.recordHash));
+          if (res.ok) setRecord(await res.json());
+        } catch (_) { /* record display is best-effort */ }
       }
     } catch (err) {
       console.error(err);
@@ -39,8 +52,8 @@ export default function VerifyResult() {
     }
   }
 
-  const statusInfo = result ? (RESULT_STATUS[Number(result.status)] || RESULT_STATUS[0]) : null;
   const totalVotes = result ? result.votes.reduce((s, v) => s + BigInt(v), 0n) : 0n;
+  const imageCid = record?.pinkSheetImageCid;
 
   return (
     <div style={{
@@ -64,8 +77,8 @@ export default function VerifyResult() {
             Verify a Polling Station Result
           </h1>
           <p style={{ fontSize: "12px", color: "var(--text2)", lineHeight: 1.65, maxWidth: "440px", margin: "0 auto" }}>
-            Enter any polling station code to see its official result exactly as recorded
-            on the blockchain — including the original Pink Sheet. No login required.
+            Enter any polling station code to see its official result exactly as recorded on the blockchain —
+            including the original Pink Sheet and the party agents who verified it. No login required.
           </p>
         </div>
 
@@ -99,7 +112,6 @@ export default function VerifyResult() {
           </div>
         )}
 
-        {/* Result card */}
         {result && (
           <div style={{ animation: "slideUp 0.3s ease" }}>
 
@@ -110,13 +122,17 @@ export default function VerifyResult() {
                   <div style={{ fontSize: "11px", fontFamily: "DM Mono,monospace", color: "var(--gold)", marginBottom: "4px" }}>
                     {result.stationId}
                   </div>
-                  <div style={{ fontSize: "17px", fontWeight: 700, color: "var(--bright)" }}>{result.stationName}</div>
-                  <div style={{ fontSize: "11px", color: "var(--text2)", marginTop: "3px" }}>
-                    {result.constituency} Constituency · {result.district} · {result.region} Region
+                  <div style={{ fontSize: "17px", fontWeight: 700, color: "var(--bright)" }}>
+                    {record?.stationName || result.stationId}
                   </div>
+                  {record?.constituency && (
+                    <div style={{ fontSize: "11px", color: "var(--text2)", marginTop: "3px" }}>
+                      {record.constituency} Constituency
+                    </div>
+                  )}
                 </div>
-                <span className={`pill ${statusInfo.style}`} style={{ fontSize: "11px", padding: "4px 12px" }}>
-                  {statusInfo.label}
+                <span className="pill ok" style={{ fontSize: "11px", padding: "4px 12px" }}>
+                  Recorded · Final
                 </span>
               </div>
             </div>
@@ -127,7 +143,7 @@ export default function VerifyResult() {
                 <div className="dot" style={{ background: "var(--gold)" }} />
                 Votes Recorded — {formatNumber(totalVotes)} total
               </div>
-              {CANDIDATES.map((c, i) => {
+              {candidates.map((c, i) => {
                 const v = BigInt(result.votes[i] || 0);
                 const pct = totalVotes > 0n ? Number((v * 1000n) / totalVotes) / 10 : 0;
                 return (
@@ -149,9 +165,9 @@ export default function VerifyResult() {
               })}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", marginTop: "14px", paddingTop: "12px", borderTop: "1px solid var(--border)" }}>
                 {[
-                  ["Registered", result.registeredVoters],
                   ["Accredited", result.accreditedVoters],
                   ["Rejected",   result.rejectedBallots],
+                  ["Total Cast", totalVotes + BigInt(result.rejectedBallots)],
                 ].map(([label, value]) => (
                   <div key={label} style={{ textAlign: "center" }}>
                     <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--bright)", fontFamily: "DM Mono,monospace" }}>{formatNumber(value)}</div>
@@ -161,6 +177,45 @@ export default function VerifyResult() {
               </div>
             </div>
 
+            {/* Party agent sign-offs (from the IPFS record) */}
+            {record?.partyAgents?.length > 0 && (
+              <div className="panel" style={{ marginBottom: "12px" }}>
+                <div className="panel-title">
+                  <div className="dot" style={{ background: "var(--gold)" }} />
+                  Party Agent Verification
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {record.partyAgents.map(a => (
+                    <div key={a.party} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 10px", background: "var(--bg2)", borderRadius: "var(--r-sm)", fontSize: "11px" }}>
+                      <span style={{ color: "var(--text)" }}>
+                        <strong style={{ color: "var(--bright)" }}>{a.party}</strong>
+                        {a.name ? ` — ${a.name}` : ""}
+                      </span>
+                      <span className={`pill ${a.signed ? "ok" : "pend"}`} style={{ fontSize: "10px" }}>
+                        {a.signed ? "Signed" : "Not signed"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Pink Sheet image (from the IPFS record) */}
+            {imageCid && (
+              <div className="panel" style={{ marginBottom: "12px" }}>
+                <div className="panel-title">
+                  <div className="dot" style={{ background: "var(--accent2)" }} />
+                  Original Pink Sheet (EC8A)
+                </div>
+                <a href={ipfsUrl(imageCid)} target="_blank" rel="noreferrer" style={{ display: "block" }}>
+                  <img src={ipfsUrl(imageCid)} alt="Pink Sheet" style={{ width: "100%", borderRadius: "var(--r-sm)", border: "1px solid var(--border)" }} />
+                </a>
+                <div style={{ fontSize: "10px", color: "var(--text2)", marginTop: "6px", textAlign: "center" }}>
+                  Tap to open full size on IPFS
+                </div>
+              </div>
+            )}
+
             {/* Provenance */}
             <div className="panel">
               <div className="panel-title">
@@ -168,9 +223,9 @@ export default function VerifyResult() {
                 On-Chain Provenance
               </div>
               {[
-                ["Submitted by",  shortAddress(result.submittedBy)],
-                ["Submitted at",  formatTimestamp(result.submittedAt)],
-                ["Status",        statusInfo.label],
+                ["Submitted by", shortAddress(result.submittedBy)],
+                ["Submitted at", formatTimestamp(result.submittedAt)],
+                ["Record (IPFS)", `${result.recordHash.slice(0, 10)}…${result.recordHash.slice(-6)}`],
               ].map(([label, value]) => (
                 <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid var(--border)", fontSize: "11px" }}>
                   <span style={{ color: "var(--text2)" }}>{label}</span>
@@ -178,12 +233,10 @@ export default function VerifyResult() {
                 </div>
               ))}
               <div style={{ display: "flex", gap: "8px", marginTop: "14px", flexWrap: "wrap" }}>
-                {result.ipfsHash && (
-                  <a href={ipfsGateway(result.ipfsHash)} target="_blank" rel="noreferrer"
-                    className="btn btn-secondary" style={{ fontSize: "11px", textDecoration: "none" }}>
-                    View Original Pink Sheet (IPFS)
-                  </a>
-                )}
+                <a href={ipfsUrl(result.recordHash)} target="_blank" rel="noreferrer"
+                  className="btn btn-secondary" style={{ fontSize: "11px", textDecoration: "none" }}>
+                  View Full Record (IPFS)
+                </a>
                 <a href={`https://amoy.polygonscan.com/address/${CONTRACT_ADDR}`} target="_blank" rel="noreferrer"
                   className="btn btn-ghost" style={{ fontSize: "11px", textDecoration: "none" }}>
                   Verify Contract on PolygonScan
@@ -193,7 +246,6 @@ export default function VerifyResult() {
           </div>
         )}
 
-        {/* Footer note */}
         <div style={{ textAlign: "center", marginTop: "28px", fontSize: "10px", color: "var(--text3)", fontFamily: "DM Mono,monospace" }}>
           Results are immutable once recorded · Contract: {CONTRACT_ADDR?.slice(0, 10)}…{CONTRACT_ADDR?.slice(-6)}
         </div>

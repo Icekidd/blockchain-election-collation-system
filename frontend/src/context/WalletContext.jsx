@@ -13,16 +13,18 @@ const AMOY_CHAIN = {
 };
 
 export function WalletProvider({ children }) {
-  const [account,     setAccount]     = useState(null);
-  const [signer,      setSigner]      = useState(null);
-  const [contract,    setContract]    = useState(null);
-  const [role,        setRole]        = useState(null);
-  const [officerName, setOfficerName] = useState(null);
-  const [error,       setError]       = useState(null);
-  const [loading,     setLoading]     = useState(false);
+  const [account,      setAccount]      = useState(null);
+  const [signer,       setSigner]       = useState(null);
+  const [contract,     setContract]     = useState(null);
+  const [role,         setRole]         = useState(null);
+  // V2 on-chain bindings, used for auto-fill:
+  const [constituency, setConstituency] = useState(null); // RO's bound constituency
+  const [station,      setStation]      = useState(null); // PO's bound station id
+  const [error,        setError]        = useState(null);
+  const [loading,      setLoading]      = useState(false);
 
   const detectRole = useCallback(async (c, addr) => {
-    if (await c.hasRole(ROLES.SENIOR,    addr)) return "SENIOR";
+    if (await c.hasRole(ROLES.EC_CHAIR,  addr)) return "EC_CHAIR";
     if (await c.hasRole(ROLES.RETURNING, addr)) return "RETURNING";
     if (await c.hasRole(ROLES.PRESIDING, addr)) return "PRESIDING";
     return null;
@@ -56,17 +58,33 @@ export function WalletProvider({ children }) {
         }
       }
 
-      const _signer      = await provider.getSigner();
-      const _account     = await _signer.getAddress();
-      const _contract    = getContract(_signer);
-      const _role        = await detectRole(_contract, _account);
-      const _officerName = await _contract.getOfficerName(_account);
+      const _signer   = await provider.getSigner();
+      const _account  = await _signer.getAddress();
+      const _contract = getContract(_signer);
+      const _role     = await detectRole(_contract, _account);
+
+      // Pull on-chain bindings for auto-fill (empty strings when not applicable)
+      let _constituency = null;
+      let _station      = null;
+      if (_role === "RETURNING") {
+        _constituency = await _contract.officerConstituency(_account);
+      } else if (_role === "PRESIDING") {
+        _station = await _contract.officerStation(_account);
+        // also resolve the station's constituency for context
+        if (_station) {
+          try {
+            const st = await _contract.getStation(_station);
+            _constituency = st.constituency;
+          } catch { /* station may not resolve; ignore */ }
+        }
+      }
 
       setAccount(_account);
       setSigner(_signer);
       setContract(_contract);
       setRole(_role);
-      setOfficerName(_officerName || null);
+      setConstituency(_constituency || null);
+      setStation(_station || null);
 
       window.ethereum.on("accountsChanged", () => window.location.reload());
       window.ethereum.on("chainChanged",    () => window.location.reload());
@@ -80,7 +98,7 @@ export function WalletProvider({ children }) {
 
   const disconnect = useCallback(() => {
     setAccount(null); setSigner(null); setContract(null);
-    setRole(null); setOfficerName(null);
+    setRole(null); setConstituency(null); setStation(null);
   }, []);
 
   useEffect(() => {
@@ -89,11 +107,11 @@ export function WalletProvider({ children }) {
 
   return (
     <WalletContext.Provider value={{
-      account, signer, contract, role, officerName,
+      account, signer, contract, role, constituency, station,
       error, loading, connectWallet, disconnect,
       isPresiding: role === "PRESIDING",
       isReturning: role === "RETURNING",
-      isSenior:    role === "SENIOR",
+      isECChair:   role === "EC_CHAIR",
       isOfficer:   role !== null,
     }}>
       {children}

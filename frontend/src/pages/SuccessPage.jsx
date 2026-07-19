@@ -1,6 +1,7 @@
 import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { shortHash, explorerTx } from "../utils/format.js";
+import { ipfsUrl } from "../utils/ipfs.js";
 
 export default function SuccessPage() {
   const { state } = useLocation();
@@ -8,7 +9,8 @@ export default function SuccessPage() {
 
   const stationId = state?.stationId || "-";
   const txHash    = state?.txHash    || null;
-  const ipfsHash  = state?.ipfsHash  || null;
+  const recordCid = state?.ipfsHash  || null; // the full verification record JSON
+  const imageCid  = state?.imageCid  || null; // the Pink Sheet photo
 
   return (
     <div style={{
@@ -41,8 +43,9 @@ export default function SuccessPage() {
           Result Recorded On-Chain
         </h2>
         <p style={{ fontSize: "12px", color: "var(--text2)", lineHeight: 1.65, marginBottom: "24px" }}>
-          {stationId} has been committed to Polygon Amoy and the Pink Sheet
-          is permanently pinned to IPFS. This record cannot be altered.
+          {stationId} has been committed to Polygon Amoy. The Pink Sheet and the full verification
+          record — including party agent sign-offs — are permanently pinned to IPFS. This result
+          is now final and cannot be altered by anyone.
         </p>
 
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r-md)", padding: "16px", marginBottom: "20px", textAlign: "left" }}>
@@ -54,9 +57,10 @@ export default function SuccessPage() {
           {[
             ["Polling Station", stationId],
             ["Transaction Hash", txHash ? shortHash(txHash) : "-"],
-            ["Pink Sheet (IPFS)", ipfsHash ? shortHash(ipfsHash) : "-"],
+            ["Verification Record (IPFS)", recordCid ? shortHash(recordCid) : "-"],
+            ["Pink Sheet Photo (IPFS)", imageCid ? shortHash(imageCid) : "-"],
             ["Network", "Polygon Amoy"],
-            ["Status", "Confirmed"],
+            ["Status", "Final — Immutable"],
           ].map(([label, value]) => (
             <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border)", fontSize: "11px" }}>
               <span style={{ color: "var(--text2)" }}>{label}</span>
@@ -67,14 +71,23 @@ export default function SuccessPage() {
           ))}
         </div>
 
-        {txHash && (
-          <a href={explorerTx(txHash)} target="_blank" rel="noreferrer" style={{
-            display: "block", marginBottom: "12px", fontSize: "12px",
-            color: "var(--accent2)", textDecoration: "none",
-          }}>
-            View on PolygonScan
-          </a>
-        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "16px" }}>
+          {txHash && (
+            <a href={explorerTx(txHash)} target="_blank" rel="noreferrer" style={{ fontSize: "12px", color: "var(--accent2)", textDecoration: "none" }}>
+              View Transaction on PolygonScan
+            </a>
+          )}
+          {recordCid && (
+            <a href={ipfsUrl(recordCid)} target="_blank" rel="noreferrer" style={{ fontSize: "12px", color: "var(--accent2)", textDecoration: "none" }}>
+              View Full Verification Record
+            </a>
+          )}
+          {imageCid && (
+            <a href={ipfsUrl(imageCid)} target="_blank" rel="noreferrer" style={{ fontSize: "12px", color: "var(--accent2)", textDecoration: "none" }}>
+              View Pink Sheet Photo
+            </a>
+          )}
+        </div>
 
         <button
           className="btn btn-secondary"
